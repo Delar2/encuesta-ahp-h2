@@ -1,0 +1,18 @@
+Respondent_ID,Timestamp,Section,A,B,Slider_1to9,Confidence,Delta_k,TFN_k_l,TFN_k_m,TFN_k_u,Ratio_A_over_B_crisp
+Juan Pardo,2026-03-04 00:32:14,Criterios principales,Cobertura del muestreo,Analítica en laboratorio,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Criterios principales,Cobertura del muestreo,Capacidad de sensores,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Criterios principales,Analítica en laboratorio,Capacidad de sensores,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Cobertura del muestreo (Campo),Densidad de puntos,Profundidad del muestreo,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Cobertura del muestreo (Campo),Densidad de puntos,Duración del muestreo,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Cobertura del muestreo (Campo),Profundidad del muestreo,Duración del muestreo,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización isotópica,Cromatografía de gases,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización isotópica,Caracterización mineralógica,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización isotópica,Análisis biogeoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización isotópica,Análisis fisicoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Cromatografía de gases,Caracterización mineralógica,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Cromatografía de gases,Análisis biogeoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Cromatografía de gases,Análisis fisicoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización mineralógica,Análisis biogeoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Caracterización mineralógica,Análisis fisicoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Analítica en laboratorio,Análisis biogeoquímicos,Análisis fisicoquímicos,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
+Juan Pardo,2026-03-04 00:32:14,Capacidad de sensores (Campo),Límite de detección,Capacidad multigas,5,Muy seguro,0.5,4.5,5.0,5.5,1.0
