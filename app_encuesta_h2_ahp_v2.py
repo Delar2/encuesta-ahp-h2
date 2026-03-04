@@ -4,6 +4,184 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 
+
+# ============================================================
+
+def interpret_pair(k, a, b):
+
+    a_fmt = f"<b><u>{a}</u></b>"
+    b_fmt = f"<b><u>{b}</u></b>"
+
+    if k == 5:
+        return f"{a_fmt} y {b_fmt} tienen importancia similar."
+    elif k < 5:
+        return f"{a_fmt} es más importante que {b_fmt}."
+    else:
+        return f"{b_fmt} es más importante que {a_fmt}."
+
+
+
+def k_to_text(k: int, a: str, b: str) -> str:
+    if k == 5:
+        return f"Iguales ({a} ≈ {b})"
+    if k < 5:
+        return f"Favorece {a} (k={k})"
+    return f"Favorece {b} (k={k})"
+
+
+# ============================================================
+
+def invert_slider(k: int) -> int:
+    return 10 - int(k)
+
+
+def ratio_to_slider_nearest(r: float) -> int:
+    """Convierte ratio A/B a escala 1–9 (5=igual) eligiendo el k más cercano."""
+    mapping = {
+        1: 9, 2: 7, 3: 5, 4: 3, 5: 1,
+        6: 1/3, 7: 1/5, 8: 1/7, 9: 1/9
+    }
+    best_k, best_err = 5, float("inf")
+    for k, rk in mapping.items():
+        err = abs(np.log(r) - np.log(rk))
+        if err < best_err:
+            best_k, best_err = k, err
+    return best_k
+
+
+def all_fixes_3x3(A: np.ndarray, items: list):
+    """Tres opciones exactas para arreglar 3×3: ajustar AB o AC o BC manteniendo las otras dos."""
+    if A.shape[0] != 3:
+        return []
+
+    A12, A13, A23 = A[0,1], A[0,2], A[1,2]
+
+    implied_13 = A12 * A23      # mantener 12 y 23 -> ajustar 13
+    implied_23 = A13 / A12      # mantener 12 y 13 -> ajustar 23
+    implied_12 = A13 / A23      # mantener 13 y 23 -> ajustar 12
+
+    fixes = [
+        {"Cambiar": f"{items[0]} vs {items[2]}",
+         "Mantener": f"{items[0]} vs {items[1]} y {items[1]} vs {items[2]}",
+         "Sugerido_k": ratio_to_slider_nearest(implied_13),
+         "Ratio_implicado": implied_13},
+
+        {"Cambiar": f"{items[1]} vs {items[2]}",
+         "Mantener": f"{items[0]} vs {items[1]} y {items[0]} vs {items[2]}",
+         "Sugerido_k": ratio_to_slider_nearest(implied_23),
+         "Ratio_implicado": implied_23},
+
+        {"Cambiar": f"{items[0]} vs {items[1]}",
+         "Mantener": f"{items[0]} vs {items[2]} y {items[1]} vs {items[2]}",
+         "Sugerido_k": ratio_to_slider_nearest(implied_12),
+         "Ratio_implicado": implied_12},
+    ]
+    return fixes
+
+
+def pref_text(r: float, left: str, right: str) -> str:
+    """Texto tipo A>B, A≈B, B>A según ratio A/B."""
+    if r > 1.15:
+        return f"**{left}** > **{right}**"
+    if r < (1/1.15):
+        return f"**{right}** > **{left}**"
+    return f"**{left}** ≈ **{right}**"
+
+
+def top_pair_suggestions(A: np.ndarray, items: list, top_n: int = 3):
+    """
+    Para n>=4: encuentra qué comparaciones (pares) aportan más a inconsistencia
+    agregando errores de tríadas. Devuelve top_n sugerencias con k recomendado.
+    """
+    n = A.shape[0]
+    # Acumuladores por par (i,k) con i<k
+    acc = {}  # (i,k) -> dict(weight_sum, log_suggest_sum)
+
+    def add_suggestion(i, k, implied_ratio, weight):
+        if i > k:
+            i, k = k, i
+            implied_ratio = 1.0 / implied_ratio  # mantener orientación i/k
+        key = (i, k)
+        if key not in acc:
+            acc[key] = {"w": 0.0, "logr": 0.0}
+        acc[key]["w"] += weight
+        acc[key]["logr"] += weight * np.log(implied_ratio)
+
+    # Recorre tríadas i<j<k
+    for i in range(n):
+        for j in range(i+1, n):
+            for k in range(j+1, n):
+                # ratios actuales
+                a_ij, a_jk, a_ik = A[i,j], A[j,k], A[i,k]
+
+                # 1) edge (i,k) implied by (i,j)*(j,k)
+                implied_ik = a_ij * a_jk
+                err_ik = abs(np.log(a_ik) - np.log(implied_ik))
+
+                # 2) edge (i,j) implied by (i,k)/(j,k)
+                implied_ij = a_ik / a_jk
+                err_ij = abs(np.log(a_ij) - np.log(implied_ij))
+
+                # 3) edge (j,k) implied by (i,k)/(i,j)
+                implied_jk = a_ik / a_ij
+                err_jk = abs(np.log(a_jk) - np.log(implied_jk))
+
+                # Agregar sugerencias (peso=error)
+                add_suggestion(i, k, implied_ik, err_ik)
+                add_suggestion(i, j, implied_ij, err_ij)
+                add_suggestion(j, k, implied_jk, err_jk)
+
+    # Construye ranking
+    rows = []
+    for (i,k), v in acc.items():
+        if v["w"] <= 0:
+            continue
+        suggested_ratio = float(np.exp(v["logr"] / v["w"]))  # promedio geométrico ponderado
+        rows.append({
+            "i": i, "k": k,
+            "Comparación": f"{items[i]} vs {items[k]}",
+            "Severidad": v["w"],
+            "Sugerido_k": ratio_to_slider_nearest(suggested_ratio),
+            "Ratio_sugerido": suggested_ratio
+        })
+
+    rows.sort(key=lambda x: x["Severidad"], reverse=True)
+    return rows[:min(top_n, len(rows))]
+
+
+def top_conflict_explanation(A: np.ndarray, items: list):
+    """
+    Devuelve una explicación humana para la tríada más conflictiva:
+    A>B, B>C, pero C>A (o equivalente).
+    """
+    n = A.shape[0]
+    best = None
+    best_err = -1.0
+
+    for i in range(n):
+        for j in range(i+1, n):
+            for k in range(j+1, n):
+                implied_ik = A[i,j] * A[j,k]
+                err = abs(np.log(A[i,k]) - np.log(implied_ik))
+                if err > best_err:
+                    best_err = err
+                    best = (i, j, k)
+
+    if best is None:
+        return None
+
+    i, j, k = best
+    return {
+        "triad": (items[i], items[j], items[k]),
+        "texts": [
+            pref_text(A[i,j], items[i], items[j]),
+            pref_text(A[j,k], items[j], items[k]),
+            pref_text(A[i,k], items[i], items[k]),
+        ],
+        "severity": best_err
+    }
+# ============================================================
+
 # ============================================================
 # FIXED SETTINGS
 # ============================================================
@@ -303,6 +481,32 @@ if "cr_by_section" not in st.session_state:
 st.progress(st.session_state.step / len(SECTIONS))
 
 def render_section(sec_name, items, comps):
+    
+    if "pending_updates" not in st.session_state:
+        st.session_state.pending_updates = {}
+    if "last_changes" not in st.session_state:
+        st.session_state.last_changes = []   # lista de cambios recientes
+
+    # aplica actualizaciones pendientes ANTES de instanciar sliders
+    for (qid, new_k) in st.session_state.pending_updates.get(sec_name, []):
+        st.session_state[f"k_{sec_name}_{qid}"] = int(new_k)
+    st.session_state.pending_updates[sec_name] = []
+
+    qid_by_pair = {(a,b): qid for (a,b,qid) in comps}
+    qid_by_pair.update({(b,a): qid for (a,b,qid) in comps})
+
+# Pendientes de aplicar (evita el error de modificar después de instanciar widgets)
+    if "pending_updates" not in st.session_state:
+        st.session_state.pending_updates = {}
+
+    # Si hay una actualización pendiente para esta sección, la dejamos en session_state
+    # ANTES de crear sliders (esto sí es permitido).
+    for (qid, new_k) in st.session_state.pending_updates.get(sec_name, []):
+        st.session_state[f"k_{sec_name}_{qid}"] = int(new_k)
+
+    # Ya aplicadas -> limpiar
+    st.session_state.pending_updates[sec_name] = []
+
     st.header(sec_name)
 
     idx = {name:i for i,name in enumerate(items)}
@@ -380,15 +584,229 @@ def render_section(sec_name, items, comps):
     c1.metric("λmax", f"{lam:.4f}")
     c2.metric("CI", f"{CI:.4f}")
     c3.metric("CR - CONSISTENCIA", f"{CR:.4f}")
+    # completar CR nuevo si hubo cambio aplicado
+    for c in reversed(st.session_state.last_changes):
+        if c["sec"] == sec_name and c["cr_new"] is None:
+            c["cr_new"] = float(CR)
+            break
+    recent = [c for c in st.session_state.last_changes if c["sec"] == sec_name]
+
+    if recent:
+        st.subheader("Cambios aplicados")
+
+        for c in recent[-3:]:
+            st.markdown(f"""
+    <div style="
+    background-color:#0b1220;
+    border:1px solid #334155;
+    border-left:8px solid #22c55e;
+    padding:14px;
+    border-radius:12px;
+    margin:10px 0;">
+
+    <b>Comparación:</b> {c['pair']}<br>
+    <b>Antes:</b> {c['k_old']} — {c['old_txt']}<br>
+    <b>Ahora:</b> {c['k_new']} — {c['new_txt']}<br>
+    <b>CR:</b> {c['cr_old']:.3f} → <b>{c['cr_new']:.3f}</b>
+
+    </div>
+    """, unsafe_allow_html=True)
+
 
     ok = CR <= CR_THRESHOLD
     if ok:
         st.success("✅ Consistencia aceptable. Puedes continuar.")
-    else:
+    if not ok:
         st.error("❌ Consistencia alta. Ajusta respuestas para continuar.")
-        triads = triad_inconsistency_report(A_crisp, items, top_k=5)
-        st.subheader("Sugerencias para corregir")
-        st.dataframe(pd.DataFrame(triads), use_container_width=True, hide_index=True)
+
+        # Explicación del conflicto (humana)
+        conflict = top_conflict_explanation(A_crisp, items)
+        if conflict:
+            a1, a2, a3 = conflict["triad"]
+            st.markdown("### ¿Qué está pasando?")
+            st.markdown(
+                "Hay una contradicción en una tríada de comparaciones (regla de transitividad). "
+                "Por ejemplo, en una parte de tus respuestas se ve algo como:"
+            )
+            st.markdown(
+                f"- {conflict['texts'][0]}\n"
+                f"- {conflict['texts'][1]}\n"
+                f"- pero también {conflict['texts'][2]}"
+            )
+            st.caption("Esto hace que el sistema no pueda asignar pesos coherentes sin ajustar alguna comparación.")
+
+        st.markdown("### Opciones para corregir (elige la que menos afecte tu opinión)")
+
+        # Caso 3×3: todas las opciones exactas
+        if len(items) == 3:
+            fixes = all_fixes_3x3(A_crisp, items)
+
+            st.markdown("""
+            <div style="padding:10px 0 5px 0; font-size:16px;">
+            Elige <b>UNA</b> opción y ajusta <b>solo</b> la comparación indicada.
+            </div>
+            """, unsafe_allow_html=True)
+
+            for opt_i, fx in enumerate(fixes, start=1):
+                cambiar = fx["Cambiar"]
+                mantener = fx["Mantener"]
+                k_sug = int(fx["Sugerido_k"])
+
+                st.markdown(f"""
+            <div style="
+            background-color:#111827;
+            border:1px solid #334155;
+            border-left:8px solid #22c55e;
+            padding:16px;
+            border-radius:14px;
+            margin:12px 0;
+            ">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <div style="font-size:18px; font-weight:800;">Opción {opt_i}</div>
+            <div style="
+                background-color:#22c55e;
+                color:#111827;
+                padding:8px 12px;
+                border-radius:999px;
+                font-weight:900;
+                font-size:18px;">
+                Mover a: {k_sug}
+            </div>
+            </div>
+
+            <div style="margin-top:10px; font-size:16px; line-height:1.55;">
+            <b>Qué cambiar:</b> {cambiar}<br>
+            <b>Qué mantener:</b> {mantener}
+            </div>
+
+            <div style="margin-top:10px; font-size:14px; color:#cbd5e1;">
+            Tip: Ajusta esa sola comparación, revisa el CR y continúa.
+            </div>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+                 # Parsear "X vs Y" para obtener X y Y
+                left, right = cambiar.split(" vs ", 1)
+
+                qid = qid_by_pair.get((left, right))
+                k_to_set = k_sug
+
+                if qid is None:
+                    qid = qid_by_pair.get((right, left))
+                    if qid is not None:
+                        k_to_set = invert_slider(k_sug)
+
+                if qid is not None:
+                    if st.button(f"Aplicar sugerencia {opt_i}", key=f"apply_{sec_name}_{opt_i}"):
+                        key_slider = f"k_{sec_name}_{qid}"
+                        k_old = int(st.session_state.get(key_slider, 5))
+                        cr_old = float(CR)
+
+                        # Registrar "antes" (para mostrar después del rerun)
+                        st.session_state.last_changes.append({
+                            "sec": sec_name,
+                            "pair": f"{left} vs {right}",
+                            "k_old": k_old,
+                            "k_new": int(k_to_set),
+                            "old_txt": k_to_text(k_old, left, right),
+                            "new_txt": k_to_text(int(k_to_set), left, right),
+                            "cr_old": cr_old,
+                            "cr_new": None  # lo llenaremos tras recalcular
+                        })
+                        st.session_state.pending_updates.setdefault(sec_name, []).append((qid, int(k_to_set)))
+                        st.rerun()
+
+            st.info("Guía rápida: 1 favorece el criterio de la izquierda, 9 favorece el de la derecha, 5 = iguales.")
+
+ 
+
+        # Caso 4×4 o mayor: Top 3 comparaciones más responsables
+        else:
+            sugg = top_pair_suggestions(A_crisp, items, top_n=3)
+
+            st.markdown("""
+            <div style="padding:10px 0 5px 0; font-size:16px;">
+            Elige <b>UNA</b> sugerencia (la que menos afecte tu opinión) y ajusta <b>solo</b> esa comparación.
+            </div>
+            """, unsafe_allow_html=True)
+
+            for opt_i, s in enumerate(sugg, start=1):
+                comp = s["Comparación"]              # "Item_i vs Item_k"
+                k_sug = int(s["Sugerido_k"])
+                left = items[s["i"]]
+                right = items[s["k"]]
+
+                st.markdown(f"""
+            <div style="
+            background-color:#111827;
+            border:1px solid #334155;
+            border-left:8px solid #22c55e;
+            padding:16px;
+            border-radius:14px;
+            margin:12px 0;
+            ">
+
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
+            <div style="
+                background-color:#22c55e;
+                color:#111827;
+                padding:8px 12px;
+                border-radius:999px;
+                font-weight:900;
+                font-size:18px;">
+                Mover a: {k_sug}
+            </div>
+            </div>
+
+            <div style="margin-top:10px; font-size:16px; line-height:1.55;">
+            <b>Qué ajustar:</b> {left} vs {right}
+            </div>
+
+            <div style="margin-top:10px; font-size:14px; color:#cbd5e1;">
+            Tip: Ajusta solo esta comparación y revisa el CR.
+            </div>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+                # Botón para aplicar automáticamente
+                qid = qid_by_pair.get((left, right))
+                k_to_set = k_sug
+
+                # Si el par está en orden invertido en tus preguntas, invierte el k
+                if qid is None:
+                    qid = qid_by_pair.get((right, left))
+                    if qid is not None:
+                        k_to_set = invert_slider(k_sug)
+
+                if qid is not None:
+                    if st.button(f"Aplicar sugerencia {opt_i}", key=f"apply_{sec_name}_{opt_i}"):
+                        # Guardar la actualización para el siguiente rerun (antes de crear widgets)
+                        key_slider = f"k_{sec_name}_{qid}"
+                        k_old = int(st.session_state.get(key_slider, 5))
+                        cr_old = float(CR)
+
+                        # Registrar "antes" (para mostrar después del rerun)
+                        st.session_state.last_changes.append({
+                            "sec": sec_name,
+                            "pair": f"{left} vs {right}",
+                            "k_old": k_old,
+                            "k_new": int(k_to_set),
+                            "old_txt": k_to_text(k_old, left, right),
+                            "new_txt": k_to_text(int(k_to_set), left, right),
+                            "cr_old": cr_old,
+                            "cr_new": None  # lo llenaremos tras recalcular
+                        })
+                        st.session_state.pending_updates.setdefault(sec_name, []).append((qid, int(k_to_set)))
+                        st.rerun()
+                else:
+                    st.caption("No pude mapear automáticamente esta comparación a una pregunta (pero puedes ajustarla manualmente).")
+
+            st.info("Guía rápida: 1 favorece el criterio de la izquierda, 9 favorece el de la derecha, 5 = iguales.")
+
 
     # Crisp weights
     w_crisp = ahp_weights_eigen(A_crisp)
@@ -408,6 +826,26 @@ def render_section(sec_name, items, comps):
 
     fuzzy_A = [[(L[i,j], M[i,j], U[i,j]) for j in range(n)] for i in range(n)]
     w_fuzzy_tfn, w_fuzzy_def = fuzzy_weights_geometric_mean(fuzzy_A)
+
+    items_html = ""
+    for a, b, qid in comps:
+        k = st.session_state.get(f"k_{sec_name}_{qid}", 5)
+        txt = interpret_pair(k, a, b)
+        items_html += f"<li style='margin:6px 0;'>{txt}</li>"
+
+    st.markdown(f"""
+    <div style="
+    background-color:#0b1220;
+    border-left:8px solid #3b82f6;
+    padding:16px;
+    border-radius:10px;
+    margin-top:10px;">
+    <b style="font-size:18px;">Interpretación de sus respuestas</b>
+    <ul style="margin-top:10px; margin-bottom:0; padding-left:22px;">
+    {items_html}
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
     return rows, CR, ok, A_crisp, w_crisp, (L,M,U), (w_fuzzy_tfn, w_fuzzy_def)
 
@@ -612,3 +1050,4 @@ if st.session_state.step == len(SECTIONS)-1:
             st.session_state.blocks = {}
             st.session_state.cr_by_section = {}
             st.stop()
+
