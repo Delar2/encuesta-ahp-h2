@@ -266,8 +266,8 @@ Las comparaciones se realizan mediante el método **AHP (Analytic Hierarchy Proc
 
 Durante la encuesta se le pedirá comparar pares de criterios utilizando una escala de **1 a 9**, donde:
 - **5** indica que ambos criterios tienen igual importancia.
-- Valores hacia la izquierda indican mayor importancia del primer criterio.
-- Valores hacia la derecha indican mayor importancia del segundo criterio.
+- Valores hacia la izquierda indican mayor importancia del primer criterio (1,2).
+- Valores hacia la derecha indican mayor importancia del segundo criterio (8,9).
 
 Además, deberá indicar su **nivel de confianza** en cada comparación:
 - **Muy seguro**
@@ -331,7 +331,14 @@ def render_section(sec_name, items, comps):
 
         </div>
         """, unsafe_allow_html=True)
-        k = st.slider("Escala 1–9 (5 = iguales)", 1, 9, 5, 1, key=f"k_{sec_name}_{qid}")
+        k = st.slider("Escala de preferencia", 1, 9, 5, 1, key=f"k_{sec_name}_{qid}")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
         conf = st.selectbox("Confianza", CONFIDENCE_OPTIONS, key=f"conf_{sec_name}_{qid}")
 
         # Crisp for CR
