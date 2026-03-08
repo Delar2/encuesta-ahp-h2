@@ -210,13 +210,6 @@ DEFINICIONES = {
     "Profundidad del muestreo": "el nivel de penetración en el suelo (p. ej., 1 m, 4 m o 6 m)",
     "Duración del muestreo": "el tiempo de medición continua por punto (p. ej., 1 hora, 24 horas o 1 semana)",
 
-    # --- Analítica en laboratorio (subcriterios) ---
-    "Caracterización isotópica": "la identificación del origen y la fuente del gas",
-    "Cromatografía de gases": "la determinación de la composición y la pureza del gas",
-    "Caracterización mineralógica": "la identificación de minerales (p. ej., DRX/FRX) y la evaluación de la reactividad del suelo",
-    "Análisis biogeoquímicos": "la determinación de la actividad biológica en el suelo asociada a la presencia de hidrógeno",
-    "Análisis fisicoquímicos": "la determinación de propiedades del suelo como porosidad, permeabilidad, pH y potencial redox",
-
     # --- Capacidad de sensores (Campo) ---
     "Límite de detección": "el rango, la sensibilidad y la precisión del sensor para medir diferentes concentraciones de hidrógeno",
     "Capacidad multigas": "la detección simultánea de otros gases además del hidrógeno, como helio y radón (trazadores de fuente)",
@@ -384,10 +377,8 @@ def send_email(to_email: str, subject: str, body: str, attachment_bytes: bytes, 
 # Survey structure
 # ============================================================
 MAIN = ("Criterios principales",
-        ["Cobertura del muestreo", "Analítica en laboratorio", "Capacidad de sensores"],
-        [("Cobertura del muestreo", "Analítica en laboratorio", "P1"),
-         ("Cobertura del muestreo", "Capacidad de sensores", "P2"),
-         ("Analítica en laboratorio", "Capacidad de sensores", "P3")]
+        ["Cobertura del muestreo", "Capacidad de sensores"],
+        [("Cobertura del muestreo", "Capacidad de sensores", "P1")]
        )
 
 COV  = ("Cobertura del muestreo (Campo)",
@@ -397,27 +388,12 @@ COV  = ("Cobertura del muestreo (Campo)",
          ("Profundidad del muestreo", "Duración del muestreo", "C3")]
        )
 
-LAB  = ("Analítica en laboratorio",
-        ["Caracterización isotópica", "Cromatografía de gases", "Caracterización mineralógica",
-         "Análisis biogeoquímicos", "Análisis fisicoquímicos"],
-        [("Caracterización isotópica", "Cromatografía de gases", "L1"),
-         ("Caracterización isotópica", "Caracterización mineralógica", "L2"),
-         ("Caracterización isotópica", "Análisis biogeoquímicos", "L3"),
-         ("Caracterización isotópica", "Análisis fisicoquímicos", "L4"),
-         ("Cromatografía de gases", "Caracterización mineralógica", "L5"),
-         ("Cromatografía de gases", "Análisis biogeoquímicos", "L6"),
-         ("Cromatografía de gases", "Análisis fisicoquímicos", "L7"),
-         ("Caracterización mineralógica", "Análisis biogeoquímicos", "L8"),
-         ("Caracterización mineralógica", "Análisis fisicoquímicos", "L9"),
-         ("Análisis biogeoquímicos", "Análisis fisicoquímicos", "L10")]
-       )
-
 SENS = ("Capacidad de sensores (Campo)",
         ["Límite de detección", "Capacidad multigas"],
         [("Límite de detección", "Capacidad multigas", "S1")]
        )
 
-SECTIONS = [MAIN, COV, LAB, SENS]
+SECTIONS = [MAIN, COV, SENS]
 
 # Parent mapping for global weights
 PARENT_OF = {
@@ -1050,4 +1026,5 @@ if st.session_state.step == len(SECTIONS)-1:
             st.session_state.blocks = {}
             st.session_state.cr_by_section = {}
             st.stop()
+
 
