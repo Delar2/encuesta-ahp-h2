@@ -377,8 +377,10 @@ def send_email(to_email: str, subject: str, body: str, attachment_bytes: bytes, 
 # Survey structure
 # ============================================================
 MAIN = ("Criterios principales",
-        ["Cobertura del muestreo", "Capacidad de sensores"],
-        [("Cobertura del muestreo", "Capacidad de sensores", "P1")]
+        ["Cobertura del muestreo", "Analítica en laboratorio", "Capacidad de sensores"],
+        [("Cobertura del muestreo", "Analítica en laboratorio", "P1"),
+         ("Cobertura del muestreo", "Capacidad de sensores", "P2"),
+         ("Analítica en laboratorio", "Capacidad de sensores", "P3")]
        )
 
 COV  = ("Cobertura del muestreo (Campo)",
@@ -1026,5 +1028,6 @@ if st.session_state.step == len(SECTIONS)-1:
             st.session_state.blocks = {}
             st.session_state.cr_by_section = {}
             st.stop()
+
 
 
