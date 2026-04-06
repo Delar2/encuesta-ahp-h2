@@ -56,14 +56,6 @@ def interpret_pair(k: int, a: str, b: str) -> str:
     return f"{b_fmt} es más importante que {a_fmt}."
 
 
-def preference_phrase_from_ratio(r: float, a: str, b: str) -> str:
-    if r > 1.15:
-        return f"{a} > {b}"
-    if r < (1 / 1.15):
-        return f"{b} > {a}"
-    return f"{a} ≈ {b}"
-
-
 # ============================================================
 # FUNCIONES MATEMÁTICAS
 # ============================================================
@@ -233,7 +225,7 @@ def generate_comparisons(criteria):
 
 COMPARISONS = generate_comparisons(CRITERIA)
 TOTAL_QUESTIONS = len(COMPARISONS)
-TOTAL_STEPS = TOTAL_QUESTIONS + 1  # paso 0 = ranking inicial
+TOTAL_STEPS = TOTAL_QUESTIONS + 1
 
 
 # ============================================================
@@ -249,11 +241,8 @@ def ensure_answer_state():
         if f"answer_conf_{qid}" not in st.session_state:
             st.session_state[f"answer_conf_{qid}"] = CONFIDENCE_OPTIONS[0]
 
-    defaults = CRITERIA[:]
-    for pos in range(1, len(CRITERIA) + 1):
-        key = f"rank_pos_{pos}"
-        if key not in st.session_state:
-            st.session_state[key] = defaults[pos - 1]
+    if "initial_ranking" not in st.session_state:
+        st.session_state["initial_ranking"] = CRITERIA[:]
 
 
 def load_current_question_into_ui():
@@ -272,21 +261,26 @@ def save_current_question_from_ui():
     st.session_state[f"answer_conf_{qid}"] = st.session_state["ui_conf"]
 
 
-def validate_initial_ranking():
-    picks = [st.session_state[f"rank_pos_{pos}"] for pos in range(1, len(CRITERIA) + 1)]
-    return len(set(picks)) == len(CRITERIA)
-
-
 def get_initial_ranking():
-    return [st.session_state[f"rank_pos_{pos}"] for pos in range(1, len(CRITERIA) + 1)]
+    return st.session_state["initial_ranking"][:]
+
+
+def move_rank_item_up(index: int):
+    ranking = st.session_state["initial_ranking"][:]
+    if index > 0:
+        ranking[index - 1], ranking[index] = ranking[index], ranking[index - 1]
+    st.session_state["initial_ranking"] = ranking
+
+
+def move_rank_item_down(index: int):
+    ranking = st.session_state["initial_ranking"][:]
+    if index < len(ranking) - 1:
+        ranking[index + 1], ranking[index] = ranking[index], ranking[index + 1]
+    st.session_state["initial_ranking"] = ranking
 
 
 def go_next():
     if st.session_state.current_step == 0:
-        if not validate_initial_ranking():
-            st.session_state["ranking_error"] = "Cada posición debe tener un criterio distinto."
-            return
-        st.session_state["ranking_error"] = ""
         st.session_state.current_step = 1
         load_current_question_into_ui()
         return
@@ -307,6 +301,13 @@ def go_prev():
         load_current_question_into_ui()
     else:
         st.session_state.current_step = 0
+
+
+def go_to_question(question_number: int):
+    if st.session_state.current_step > 0 and "ui_k" in st.session_state and "ui_conf" in st.session_state:
+        save_current_question_from_ui()
+    st.session_state.current_step = question_number
+    load_current_question_into_ui()
 
 
 # ============================================================
@@ -403,31 +404,6 @@ def ranking_comparison_df(initial_rank, ahp_rank):
     return pd.DataFrame(rows).sort_values("Orden AHP actual")
 
 
-def top_inconsistent_triads(A: np.ndarray, labels: list, top_k: int = 3):
-    n = A.shape[0]
-    rows = []
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(j + 1, n):
-                implied_ik = A[i, j] * A[j, k]
-                actual_ik = A[i, k]
-                err = abs(np.log(actual_ik) - np.log(implied_ik))
-
-                rows.append({
-                    "Triada": f"{labels[i]} • {labels[j]} • {labels[k]}",
-                    "Lectura": (
-                        f"{preference_phrase_from_ratio(A[i, j], labels[i], labels[j])}; "
-                        f"{preference_phrase_from_ratio(A[j, k], labels[j], labels[k])}; "
-                        f"{preference_phrase_from_ratio(A[i, k], labels[i], labels[k])}"
-                    ),
-                    "Error_log": float(err)
-                })
-
-    rows.sort(key=lambda x: x["Error_log"], reverse=True)
-    return rows[:min(top_k, len(rows))]
-
-
 def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
     n = A.shape[0]
     errs = []
@@ -444,14 +420,22 @@ def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
     return float(np.mean(errs))
 
 
-def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 3):
+def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
+    pair_to_q = {}
+    for q_num, (a, b, _) in enumerate(COMPARISONS, start=1):
+        pair_to_q[(a, b)] = q_num
+        pair_to_q[(b, a)] = q_num
+
     n = A.shape[0]
     rows = []
 
     for i in range(n):
         for j in range(i + 1, n):
+            a = labels[i]
+            b = labels[j]
             rows.append({
-                "Comparación": f"{labels[i]} vs {labels[j]}",
+                "Pregunta": pair_to_q[(a, b)],
+                "Comparación": f"{a} vs {b}",
                 "Inconsistencia_local": pair_local_inconsistency(A, i, j)
             })
 
@@ -462,16 +446,13 @@ def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 3):
 # ============================================================
 # UI
 # ============================================================
-st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
+st.set_page_config(page_title="Encuesta AHP H₂", layout="wide")
 
 ensure_answer_state()
 
 if "ui_k" not in st.session_state or "ui_conf" not in st.session_state:
     if st.session_state.current_step > 0:
         load_current_question_into_ui()
-
-if "ranking_error" not in st.session_state:
-    st.session_state["ranking_error"] = ""
 
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
@@ -483,14 +464,18 @@ st.markdown("""
 3. Durante la encuesta se mostrará:
    - su **orden inicial**,
    - el **orden actual derivado por AHP**,
-   - y los principales focos de inconsistencia.
+   - y las **comparaciones más sensibles**.
 4. Las respuestas **no se corrigen automáticamente**.
 """)
 
 st.header("Datos del participante")
-respondent_name = st.text_input("Nombre completo *", value="", placeholder="Ej: Juan Pardo")
-profession = st.text_input("Profesión *", value="", placeholder="Ej: Ingeniero químico")
-academic_level = st.selectbox("Nivel máximo de formación académica *", ACADEMIC_LEVELS)
+colp1, colp2, colp3 = st.columns(3)
+with colp1:
+    respondent_name = st.text_input("Nombre completo *", value="", placeholder="Ej: Juan Pardo")
+with colp2:
+    profession = st.text_input("Profesión *", value="", placeholder="Ej: Ingeniero químico")
+with colp3:
+    academic_level = st.selectbox("Nivel máximo de formación académica *", ACADEMIC_LEVELS)
 
 if not respondent_name.strip() or not profession.strip():
     st.info("Complete su nombre y profesión para comenzar.")
@@ -499,7 +484,6 @@ if not respondent_name.strip() or not profession.strip():
 if not email_enabled():
     st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no podrá enviar resultados al email.")
 
-# Guardar la pregunta actual antes de recalcular
 if st.session_state.current_step > 0 and "ui_k" in st.session_state and "ui_conf" in st.session_state:
     save_current_question_from_ui()
 
@@ -532,33 +516,36 @@ else:
 # ============================================================
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
-    st.markdown("Seleccione el orden de **mayor importancia** a **menor importancia**. No se debe repetir ningún criterio.")
+    st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
 
-    cols = st.columns(2)
-    for idx, pos in enumerate(range(1, len(CRITERIA) + 1)):
-        with cols[idx % 2]:
-            st.selectbox(
-                f"Posición {pos}",
-                options=CRITERIA,
-                key=f"rank_pos_{pos}"
+    ranking = get_initial_ranking()
+
+    for idx, item in enumerate(ranking):
+        c1, c2, c3 = st.columns([6, 1, 1])
+        with c1:
+            st.markdown(
+                f"""
+                <div style="
+                background-color:#111827;
+                border:1px solid #334155;
+                padding:14px;
+                border-radius:12px;
+                margin:6px 0;">
+                <b>{idx + 1}.</b> {item}
+                </div>
+                """,
+                unsafe_allow_html=True
             )
-
-    if st.session_state["ranking_error"]:
-        st.error(st.session_state["ranking_error"])
-
-    if validate_initial_ranking():
-        init_rank = get_initial_ranking()
-        st.markdown("### Orden inicial seleccionado")
-        for i, c in enumerate(init_rank, start=1):
-            st.markdown(f"**{i}.** {c}")
+        with c2:
+            st.button("↑", key=f"up_{idx}", on_click=move_rank_item_up, args=(idx,), disabled=(idx == 0), use_container_width=True)
+        with c3:
+            st.button("↓", key=f"down_{idx}", on_click=move_rank_item_down, args=(idx,), disabled=(idx == len(ranking) - 1), use_container_width=True)
 
     st.markdown("### Navegación")
     _, cnav, rnav = st.columns([1, 2, 1])
     with cnav:
         st.markdown(
-            "<div style='text-align:center; padding-top:8px; font-weight:700;'>"
-            "Orden inicial de criterios"
-            "</div>",
+            "<div style='text-align:center; padding-top:8px; font-weight:700;'>Orden inicial de criterios</div>",
             unsafe_allow_html=True
         )
     with rnav:
@@ -571,102 +558,118 @@ else:
     current_idx = st.session_state.current_step - 1
     a, b, qid = COMPARISONS[current_idx]
 
-    st.header(f"Pregunta #{st.session_state.current_step}")
-    st.subheader(f"{a} vs {b}")
+    main_col, side_col = st.columns([3, 1.25])
 
-    def_a = DEFINICIONES[a]
-    def_b = DEFINICIONES[b]
+    with main_col:
+        st.header(f"Pregunta #{st.session_state.current_step}")
+        st.subheader(f"{a} vs {b}")
 
-    st.markdown(f"""
-    <div style="
-    background-color:#1f2937;
-    padding:15px;
-    border-radius:10px;
-    border-left:6px solid #22c55e;
-    font-size:16px;
-    line-height:1.6;">
+        def_a = DEFINICIONES[a]
+        def_b = DEFINICIONES[b]
 
-    Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
-    <br><br>
-    Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
-    <br>
-    Marque <b>5</b> si cree que ambos son igualmente necesarios.
+        st.markdown(f"""
+        <div style="
+        background-color:#1f2937;
+        padding:15px;
+        border-radius:10px;
+        border-left:6px solid #22c55e;
+        font-size:16px;
+        line-height:1.6;">
 
-    </div>
-    """, unsafe_allow_html=True)
+        Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
+        <br><br>
+        Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
+        <br>
+        Marque <b>5</b> si cree que ambos son igualmente necesarios.
 
-    st.slider("Escala de preferencia", 1, 9, key="ui_k")
+        </div>
+        """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+        st.slider("Escala de preferencia", 1, 9, key="ui_k")
 
-    st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
-    st.markdown(f"""
-    <div style="
-    background-color:#0b1220;
-    border-left:8px solid #3b82f6;
-    padding:14px;
-    border-radius:10px;
-    margin-top:10px;">
-    <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
-    </div>
-    """, unsafe_allow_html=True)
+        st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
-    # --------------------------------------------------------
-    # ORDEN INICIAL VS ORDEN ACTUAL AHP
-    # --------------------------------------------------------
-    st.header("Organización de preferencias")
+        st.markdown(f"""
+        <div style="
+        background-color:#0b1220;
+        border-left:8px solid #3b82f6;
+        padding:14px;
+        border-radius:10px;
+        margin-top:10px;">
+        <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
+        </div>
+        """, unsafe_allow_html=True)
 
-    initial_rank = get_initial_ranking()
-    ahp_rank = current_ahp_ranking(w_crisp)
+        # NAVEGADOR JUSTO DEBAJO DE LA PREGUNTA
+        st.markdown("### Navegador entre preguntas")
+        n1, n2, n3, n4 = st.columns([1, 2, 1, 1])
 
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        st.subheader("Orden inicial del encuestado")
-        for i, c in enumerate(initial_rank, start=1):
-            st.markdown(f"**{i}.** {c}")
+        with n1:
+            st.button("⬅️ Anterior", on_click=go_prev, use_container_width=True)
 
-    with rc2:
-        st.subheader("Orden actual según AHP")
-        for i, c in enumerate(ahp_rank, start=1):
-            st.markdown(f"**{i}.** {c}")
+        with n2:
+            st.markdown(
+                f"<div style='text-align:center; padding-top:8px; font-weight:700;'>Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}</div>",
+                unsafe_allow_html=True
+            )
 
-    st.subheader("Comparación entre orden inicial y orden AHP")
-    st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
+        with n3:
+            st.number_input(
+                "Ir a",
+                min_value=1,
+                max_value=TOTAL_QUESTIONS,
+                value=st.session_state.current_step,
+                step=1,
+                key="goto_number_input"
+            )
 
-    # --------------------------------------------------------
-    # INCONSISTENCIA
-    # --------------------------------------------------------
-    st.header("Dónde se está generando la inconsistencia")
+        with n4:
+            if st.button("Ir", use_container_width=True):
+                go_to_question(int(st.session_state["goto_number_input"]))
 
-    triads = top_inconsistent_triads(A_crisp, CRITERIA, top_k=3)
-    pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=3)
+        n5, n6 = st.columns([1, 1])
+        with n5:
+            st.button("Siguiente ➡️", on_click=go_next, disabled=(st.session_state.current_step == TOTAL_QUESTIONS), use_container_width=True)
+        with n6:
+            st.selectbox(
+                "Pregunta rápida",
+                options=list(range(1, TOTAL_QUESTIONS + 1)),
+                index=st.session_state.current_step - 1,
+                key="quick_question_selector"
+            )
+            if st.button("Abrir pregunta", key="open_quick_question", use_container_width=True):
+                go_to_question(int(st.session_state["quick_question_selector"]))
 
-    ic1, ic2 = st.columns(2)
+        # ORGANIZACIÓN DE PREFERENCIAS
+        st.header("Organización de preferencias")
 
-    with ic1:
-        st.subheader("Tríadas más conflictivas")
-        for t in triads:
-            st.markdown(f"""
-            <div style="
-            background-color:#111827;
-            border:1px solid #334155;
-            border-left:8px solid #f59e0b;
-            padding:14px;
-            border-radius:12px;
-            margin:10px 0;">
-            <b>{t['Triada']}</b><br>
-            {t['Lectura']}<br>
-            <b>Error:</b> {t['Error_log']:.4f}
-            </div>
-            """, unsafe_allow_html=True)
+        initial_rank = get_initial_ranking()
+        ahp_rank = current_ahp_ranking(w_crisp)
 
-    with ic2:
-        st.subheader("Comparaciones más sensibles")
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            st.subheader("Orden inicial del encuestado")
+            for i, c in enumerate(initial_rank, start=1):
+                st.markdown(f"**{i}.** {c}")
+
+        with rc2:
+            st.subheader("Orden actual según AHP")
+            for i, c in enumerate(ahp_rank, start=1):
+                st.markdown(f"**{i}.** {c}")
+
+        st.subheader("Comparación entre orden inicial y orden AHP")
+        st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
+
+    with side_col:
+        st.header("Comparaciones más sensibles")
+        pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
+
         for p in pairs:
             st.markdown(f"""
             <div style="
@@ -676,48 +679,21 @@ else:
             padding:14px;
             border-radius:12px;
             margin:10px 0;">
-            <b>{p['Comparación']}</b><br>
+            <b>Pregunta {p['Pregunta']}</b><br>
+            {p['Comparación']}<br>
             <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
             </div>
             """, unsafe_allow_html=True)
 
-    # --------------------------------------------------------
-    # NAVEGACIÓN
-    # --------------------------------------------------------
-    st.markdown("### Navegador entre preguntas")
-    b1, b2, b3 = st.columns([1, 2, 1])
-
-    with b1:
-        st.button(
-            "⬅️ Anterior",
-            on_click=go_prev,
-            use_container_width=True
-        )
-
-    with b2:
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
-            f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
-            f"</div>",
-            unsafe_allow_html=True
-        )
-
-    with b3:
-        st.button(
-            "Siguiente ➡️",
-            on_click=go_next,
-            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
-            use_container_width=True
-        )
+            if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_{p['Pregunta']}", use_container_width=True):
+                go_to_question(int(p["Pregunta"]))
 
 # ============================================================
 # FINALIZAR
 # ============================================================
 st.header("Finalizar")
 
-if not validate_initial_ranking():
-    st.error("❌ El orden inicial no es válido. Cada posición debe tener un criterio distinto.")
-elif not ok:
+if not ok:
     st.error("❌ No puede finalizar mientras el CR sea mayor a 0.10.")
 else:
     if st.button("Enviar respuestas"):
@@ -768,7 +744,6 @@ else:
                 "CI": float(CI)
             }])
 
-            df_triads = pd.DataFrame(top_inconsistent_triads(A_crisp, CRITERIA, top_k=10))
             df_pairs = pd.DataFrame(top_problematic_pairs(A_crisp, CRITERIA, top_k=15))
 
             df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
@@ -797,7 +772,6 @@ else:
                 df_rank_compare.to_excel(writer, index=False, sheet_name="Comparacion_Ordenes")
                 df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
                 df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
-                df_triads.to_excel(writer, index=False, sheet_name="Triadas_Conflictivas")
                 df_pairs.to_excel(writer, index=False, sheet_name="Pares_Sensibles")
                 df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
                 df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
@@ -818,7 +792,7 @@ else:
                 f"Nivel académico: {academic_level}\n"
                 f"Timestamp: {ts}\n"
                 f"CR: {CR:.4f}\n\n"
-                f"Se adjunta el archivo Excel con ranking inicial, comparaciones AHP, consistencia e indicadores de conflicto."
+                f"Se adjunta el archivo Excel con ranking inicial, comparaciones AHP, consistencia y comparaciones sensibles."
             )
 
             try:
