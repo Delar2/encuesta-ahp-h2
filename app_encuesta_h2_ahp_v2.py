@@ -229,24 +229,57 @@ TOTAL_QUESTIONS = len(COMPARISONS)
 
 
 # ============================================================
-# MÉTRICAS DE IMPACTO DE LA PREGUNTA ACTUAL
+# ESTADO PERSISTENTE DE RESPUESTAS
+# ============================================================
+def ensure_answer_state():
+    if "current_question" not in st.session_state:
+        st.session_state.current_question = 1
+
+    for _, _, qid in COMPARISONS:
+        if f"answer_k_{qid}" not in st.session_state:
+            st.session_state[f"answer_k_{qid}"] = 5
+        if f"answer_conf_{qid}" not in st.session_state:
+            st.session_state[f"answer_conf_{qid}"] = CONFIDENCE_OPTIONS[0]
+
+
+def load_current_question_into_ui():
+    a, b, qid = COMPARISONS[st.session_state.current_question - 1]
+    st.session_state["ui_k"] = st.session_state[f"answer_k_{qid}"]
+    st.session_state["ui_conf"] = st.session_state[f"answer_conf_{qid}"]
+
+
+def save_current_question_from_ui():
+    a, b, qid = COMPARISONS[st.session_state.current_question - 1]
+    st.session_state[f"answer_k_{qid}"] = int(st.session_state["ui_k"])
+    st.session_state[f"answer_conf_{qid}"] = st.session_state["ui_conf"]
+
+
+def go_next():
+    save_current_question_from_ui()
+    if st.session_state.current_question < TOTAL_QUESTIONS:
+        st.session_state.current_question += 1
+    load_current_question_into_ui()
+
+
+def go_prev():
+    save_current_question_from_ui()
+    if st.session_state.current_question > 1:
+        st.session_state.current_question -= 1
+    load_current_question_into_ui()
+
+
+# ============================================================
+# MÉTRICAS DE IMPACTO
 # ============================================================
 def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
-    """
-    Mide cuánto contribuye el par (i,j) a la inconsistencia,
-    promediando el error logarítmico en todas las tríadas que lo contienen.
-    """
     n = A.shape[0]
     errs = []
 
     for k in range(n):
         if k == pair_i or k == pair_j:
             continue
-
-        i, j = pair_i, pair_j
-
-        implied_ij = A[i, k] / A[j, k]
-        err = abs(np.log(A[i, j]) - np.log(implied_ij))
+        implied_ij = A[pair_i, k] / A[pair_j, k]
+        err = abs(np.log(A[pair_i, pair_j]) - np.log(implied_ij))
         errs.append(err)
 
     if not errs:
@@ -255,12 +288,8 @@ def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
 
 
 def pair_cr_without_current(A: np.ndarray, pair_i: int, pair_j: int):
-    """
-    Calcula un CR de referencia quitando el efecto directo del par actual,
-    reemplazándolo por el promedio geométrico implicado por los demás criterios.
-    """
-    n = A.shape[0]
     implied = []
+    n = A.shape[0]
 
     for k in range(n):
         if k == pair_i or k == pair_j:
@@ -274,7 +303,6 @@ def pair_cr_without_current(A: np.ndarray, pair_i: int, pair_j: int):
     A2 = A.copy()
     A2[pair_i, pair_j] = implied_ratio
     A2[pair_j, pair_i] = 1.0 / implied_ratio
-
     return ahp_cr(A2)[2]
 
 
@@ -287,8 +315,8 @@ def collect_all_rows_and_results():
     rows = []
 
     for q_num, (a, b, qid) in enumerate(COMPARISONS, start=1):
-        k = int(st.session_state.get(f"k_{qid}", 5))
-        conf = st.session_state.get(f"conf_{qid}", CONFIDENCE_OPTIONS[0])
+        k = int(st.session_state[f"answer_k_{qid}"])
+        conf = st.session_state[f"answer_conf_{qid}"]
 
         r_crisp = slider_to_ratio_int(k)
         i, j = idx_map[a], idx_map[b]
@@ -329,7 +357,6 @@ def collect_all_rows_and_results():
     M = np.ones((n, n), dtype=float)
     U = np.ones((n, n), dtype=float)
 
-    idx_map = {name: i for i, name in enumerate(CRITERIA)}
     for r in rows:
         i = idx_map[r["Criterion_A"]]
         j = idx_map[r["Criterion_B"]]
@@ -344,31 +371,14 @@ def collect_all_rows_and_results():
 
 
 # ============================================================
-# CALLBACKS DE NAVEGACIÓN
-# ============================================================
-def go_next():
-    if st.session_state.current_question < TOTAL_QUESTIONS:
-        st.session_state.current_question += 1
-
-
-def go_prev():
-    if st.session_state.current_question > 1:
-        st.session_state.current_question -= 1
-
-
-# ============================================================
 # UI
 # ============================================================
 st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
 
-if "current_question" not in st.session_state:
-    st.session_state.current_question = 1
+ensure_answer_state()
 
-for _, _, qid in COMPARISONS:
-    if f"k_{qid}" not in st.session_state:
-        st.session_state[f"k_{qid}"] = 5
-    if f"conf_{qid}" not in st.session_state:
-        st.session_state[f"conf_{qid}"] = CONFIDENCE_OPTIONS[0]
+if "ui_k" not in st.session_state or "ui_conf" not in st.session_state:
+    load_current_question_into_ui()
 
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
@@ -376,9 +386,9 @@ st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 st.markdown("""
 ### Instrucciones
 - Cada pantalla muestra **una sola pregunta**.
-- Las respuestas **no se modifican automáticamente**.
-- La **consistencia global** se calcula en tiempo real.
-- También se muestra cómo la **pregunta actual** influye en la consistencia.
+- Las respuestas **sí se guardan** al navegar.
+- La **consistencia global** se calcula automáticamente.
+- Se muestra también cómo la **pregunta actual** afecta la consistencia.
 """)
 
 st.header("Datos del participante")
@@ -393,32 +403,22 @@ if not respondent_name.strip() or not profession.strip():
 if not email_enabled():
     st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no podrá enviar resultados al email.")
 
+save_current_question_from_ui()
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 ok = CR <= CR_THRESHOLD
 
-# ============================================================
-# NAVEGACIÓN
-# ============================================================
 st.header("Navegación")
 st.progress(st.session_state.current_question / TOTAL_QUESTIONS)
 st.caption(f"Pregunta {st.session_state.current_question} de {TOTAL_QUESTIONS}")
 
-nav1, nav2, nav3 = st.columns([1, 1, 1])
-with nav1:
+n1, n2, n3 = st.columns(3)
+with n1:
     st.metric("λmax", f"{lam:.4f}")
-with nav2:
+with n2:
     st.metric("CI", f"{CI:.4f}")
-with nav3:
+with n3:
     st.metric("CR global", f"{CR:.4f}")
 
-if ok:
-    st.success("✅ Consistencia global aceptable.")
-else:
-    st.warning("⚠️ La consistencia global aún es alta.")
-
-# ============================================================
-# PREGUNTA ACTUAL
-# ============================================================
 current_idx = st.session_state.current_question - 1
 a, b, qid = COMPARISONS[current_idx]
 i = CRITERIA.index(a)
@@ -427,8 +427,8 @@ j = CRITERIA.index(b)
 st.header(f"Pregunta #{st.session_state.current_question}")
 st.subheader(f"{a} vs {b}")
 
-def_a = DEFINICIONES.get(a, "—")
-def_b = DEFINICIONES.get(b, "—")
+def_a = DEFINICIONES[a]
+def_b = DEFINICIONES[b]
 
 st.markdown(f"""
 <div style="
@@ -448,17 +448,15 @@ Marque <b>5</b> si cree que ambos son igualmente necesarios.
 </div>
 """, unsafe_allow_html=True)
 
-st.slider("Escala de preferencia", 1, 9, key=f"k_{qid}")
-
+st.slider("Escala de preferencia", 1, 9, key="ui_k")
 c1, c2 = st.columns(2)
 with c1:
     st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
 with c2:
     st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
-st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
+st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
-k_current = int(st.session_state[f"k_{qid}"])
 st.markdown(f"""
 <div style="
 background-color:#0b1220;
@@ -466,15 +464,11 @@ border-left:8px solid #3b82f6;
 padding:14px;
 border-radius:10px;
 margin-top:10px;">
-<b>Interpretación actual:</b> {interpret_pair(k_current, a, b)}
+<b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# IMPACTO DE LA PREGUNTA ACTUAL
-# ============================================================
 st.header("Impacto de esta pregunta en la consistencia")
-
 local_err = pair_local_inconsistency(A_crisp, i, j)
 cr_without_current = pair_cr_without_current(A_crisp, i, j)
 delta_cr = CR - cr_without_current
@@ -485,20 +479,10 @@ with m1:
 with m2:
     st.metric("CR si esta pregunta estuviera alineada", f"{cr_without_current:.4f}")
 with m3:
-    st.metric("Impacto estimado de esta pregunta", f"{delta_cr:+.4f}")
-
-if delta_cr > 0:
-    st.info("Esta respuesta parece aumentar la inconsistencia global.")
-elif delta_cr < 0:
-    st.info("Esta respuesta parece ayudar a reducir la inconsistencia global.")
-else:
-    st.info("Esta respuesta tiene un efecto neutro o muy pequeño sobre la inconsistencia global.")
+    st.metric("Impacto estimado", f"{delta_cr:+.4f}")
 
 st.caption(f"Error local promedio de esta comparación en sus tríadas: {local_err:.4f}")
 
-# ============================================================
-# BOTONES DE NAVEGACIÓN
-# ============================================================
 st.markdown("### Navegador entre preguntas")
 b1, b2, b3 = st.columns([1, 2, 1])
 
@@ -526,9 +510,6 @@ with b3:
         use_container_width=True
     )
 
-# ============================================================
-# RESUMEN DE PESOS
-# ============================================================
 st.header("Pesos resultantes")
 
 df_crisp_weights = pd.DataFrame({
@@ -546,16 +527,10 @@ df_fuzzy_weights = pd.DataFrame({
 
 p1, p2 = st.columns(2)
 with p1:
-    st.subheader("Pesos crisp")
     st.dataframe(df_crisp_weights, use_container_width=True)
-
 with p2:
-    st.subheader("Pesos fuzzy")
     st.dataframe(df_fuzzy_weights[["Criterio", "Peso_fuzzy_defuzz"]], use_container_width=True)
 
-# ============================================================
-# ENVÍO FINAL SOLO POR EMAIL
-# ============================================================
 st.header("Finalizar")
 
 if not ok:
