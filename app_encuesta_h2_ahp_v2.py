@@ -245,20 +245,62 @@ def ensure_answer_state():
         st.session_state["initial_ranking"] = CRITERIA[:]
 
 
-def load_current_question_into_ui():
+def load_current_question_into_ui(force: bool = False):
     if st.session_state.current_step == 0:
         return
+
     _, _, qid = COMPARISONS[st.session_state.current_step - 1]
-    st.session_state["ui_k"] = st.session_state[f"answer_k_{qid}"]
-    st.session_state["ui_conf"] = st.session_state[f"answer_conf_{qid}"]
+
+    if force or st.session_state.get("ui_loaded_qid") != qid:
+        st.session_state["ui_k"] = st.session_state[f"answer_k_{qid}"]
+        st.session_state["ui_conf"] = st.session_state[f"answer_conf_{qid}"]
+        st.session_state["ui_loaded_qid"] = qid
 
 
 def save_current_question_from_ui():
     if st.session_state.current_step == 0:
         return
+    if "ui_k" not in st.session_state or "ui_conf" not in st.session_state:
+        return
+
     _, _, qid = COMPARISONS[st.session_state.current_step - 1]
     st.session_state[f"answer_k_{qid}"] = int(st.session_state["ui_k"])
     st.session_state[f"answer_conf_{qid}"] = st.session_state["ui_conf"]
+
+
+def request_question_load(step: int):
+    st.session_state.current_step = step
+    st.session_state["pending_question_load"] = True
+
+
+def go_next():
+    if st.session_state.current_step == 0:
+        request_question_load(1)
+        return
+
+    save_current_question_from_ui()
+    if st.session_state.current_step < TOTAL_QUESTIONS:
+        request_question_load(st.session_state.current_step + 1)
+
+
+def go_prev():
+    if st.session_state.current_step == 0:
+        return
+
+    save_current_question_from_ui()
+
+    if st.session_state.current_step > 1:
+        request_question_load(st.session_state.current_step - 1)
+    else:
+        st.session_state.current_step = 0
+        st.session_state["pending_question_load"] = False
+
+
+def go_to_question(question_number: int):
+    if st.session_state.current_step > 0:
+        save_current_question_from_ui()
+    request_question_load(int(question_number))
+
 
 
 def get_initial_ranking():
@@ -277,37 +319,6 @@ def move_rank_item_down(index: int):
     if index < len(ranking) - 1:
         ranking[index + 1], ranking[index] = ranking[index], ranking[index + 1]
     st.session_state["initial_ranking"] = ranking
-
-
-def go_next():
-    if st.session_state.current_step == 0:
-        st.session_state.current_step = 1
-        load_current_question_into_ui()
-        return
-
-    save_current_question_from_ui()
-    if st.session_state.current_step < TOTAL_QUESTIONS:
-        st.session_state.current_step += 1
-        load_current_question_into_ui()
-
-
-def go_prev():
-    if st.session_state.current_step == 0:
-        return
-
-    save_current_question_from_ui()
-    if st.session_state.current_step > 1:
-        st.session_state.current_step -= 1
-        load_current_question_into_ui()
-    else:
-        st.session_state.current_step = 0
-
-
-def go_to_question(question_number: int):
-    if st.session_state.current_step > 0 and "ui_k" in st.session_state and "ui_conf" in st.session_state:
-        save_current_question_from_ui()
-    st.session_state.current_step = question_number
-    load_current_question_into_ui()
 
 
 # ============================================================
