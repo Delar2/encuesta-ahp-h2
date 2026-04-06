@@ -558,135 +558,138 @@ else:
     current_idx = st.session_state.current_step - 1
     a, b, qid = COMPARISONS[current_idx]
 
-    main_col, side_col = st.columns([3, 1.25])
+    st.header(f"Pregunta #{st.session_state.current_step}")
+    st.subheader(f"{a} vs {b}")
 
-    with main_col:
-        st.header(f"Pregunta #{st.session_state.current_step}")
-        st.subheader(f"{a} vs {b}")
+    def_a = DEFINICIONES[a]
+    def_b = DEFINICIONES[b]
 
-        def_a = DEFINICIONES[a]
-        def_b = DEFINICIONES[b]
+    st.markdown(f"""
+    <div style="
+    background-color:#1f2937;
+    padding:15px;
+    border-radius:10px;
+    border-left:6px solid #22c55e;
+    font-size:16px;
+    line-height:1.6;">
 
+    Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
+    <br><br>
+    Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
+    <br>
+    Marque <b>5</b> si cree que ambos son igualmente necesarios.
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.slider("Escala de preferencia", 1, 9, key="ui_k")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+
+    st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
+
+    st.markdown(f"""
+    <div style="
+    background-color:#0b1220;
+    border-left:8px solid #3b82f6;
+    padding:14px;
+    border-radius:10px;
+    margin-top:10px;">
+    <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
+    </div>
+    """, unsafe_allow_html=True)
+
+    # NAVEGADOR JUSTO DEBAJO DE LA PREGUNTA
+    st.markdown("### Navegador entre preguntas")
+    n1, n2, n3, n4 = st.columns([1, 2, 1, 1])
+
+    with n1:
+        st.button("⬅️ Anterior", on_click=go_prev, use_container_width=True)
+
+    with n2:
+        st.markdown(
+            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}</div>",
+            unsafe_allow_html=True
+        )
+
+    with n3:
+        st.number_input(
+            "Ir a",
+            min_value=1,
+            max_value=TOTAL_QUESTIONS,
+            value=st.session_state.current_step,
+            step=1,
+            key="goto_number_input"
+        )
+
+    with n4:
+        if st.button("Ir", use_container_width=True):
+            go_to_question(int(st.session_state["goto_number_input"]))
+
+    n5, n6 = st.columns([1, 1])
+    with n5:
+        st.button(
+            "Siguiente ➡️",
+            on_click=go_next,
+            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
+            use_container_width=True
+        )
+
+    with n6:
+        st.selectbox(
+            "Pregunta rápida",
+            options=list(range(1, TOTAL_QUESTIONS + 1)),
+            index=st.session_state.current_step - 1,
+            key="quick_question_selector"
+        )
+        if st.button("Abrir pregunta", key="open_quick_question", use_container_width=True):
+            go_to_question(int(st.session_state["quick_question_selector"]))
+
+    # ORGANIZACIÓN DE PREFERENCIAS
+    st.header("Organización de preferencias")
+
+    initial_rank = get_initial_ranking()
+    ahp_rank = current_ahp_ranking(w_crisp)
+
+    rc1, rc2 = st.columns(2)
+    with rc1:
+        st.subheader("Orden inicial del encuestado")
+        for i, c in enumerate(initial_rank, start=1):
+            st.markdown(f"**{i}.** {c}")
+
+    with rc2:
+        st.subheader("Orden actual según AHP")
+        for i, c in enumerate(ahp_rank, start=1):
+            st.markdown(f"**{i}.** {c}")
+
+    st.subheader("Comparación entre orden inicial y orden AHP")
+    st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
+
+    # COMPARACIONES MÁS SENSIBLES ABAJO
+    st.header("Comparaciones más sensibles")
+    pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
+
+    for p in pairs:
         st.markdown(f"""
         <div style="
-        background-color:#1f2937;
-        padding:15px;
-        border-radius:10px;
-        border-left:6px solid #22c55e;
-        font-size:16px;
-        line-height:1.6;">
-
-        Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
-        <br><br>
-        Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
-        <br>
-        Marque <b>5</b> si cree que ambos son igualmente necesarios.
-
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.slider("Escala de preferencia", 1, 9, key="ui_k")
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
-
-        st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
-
-        st.markdown(f"""
-        <div style="
-        background-color:#0b1220;
-        border-left:8px solid #3b82f6;
+        background-color:#111827;
+        border:1px solid #334155;
+        border-left:8px solid #ef4444;
         padding:14px;
-        border-radius:10px;
-        margin-top:10px;">
-        <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
+        border-radius:12px;
+        margin:10px 0;">
+        <b>Pregunta {p['Pregunta']}</b><br>
+        {p['Comparación']}<br>
+        <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
         </div>
         """, unsafe_allow_html=True)
 
-        # NAVEGADOR JUSTO DEBAJO DE LA PREGUNTA
-        st.markdown("### Navegador entre preguntas")
-        n1, n2, n3, n4 = st.columns([1, 2, 1, 1])
-
-        with n1:
-            st.button("⬅️ Anterior", on_click=go_prev, use_container_width=True)
-
-        with n2:
-            st.markdown(
-                f"<div style='text-align:center; padding-top:8px; font-weight:700;'>Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}</div>",
-                unsafe_allow_html=True
-            )
-
-        with n3:
-            st.number_input(
-                "Ir a",
-                min_value=1,
-                max_value=TOTAL_QUESTIONS,
-                value=st.session_state.current_step,
-                step=1,
-                key="goto_number_input"
-            )
-
-        with n4:
-            if st.button("Ir", use_container_width=True):
-                go_to_question(int(st.session_state["goto_number_input"]))
-
-        n5, n6 = st.columns([1, 1])
-        with n5:
-            st.button("Siguiente ➡️", on_click=go_next, disabled=(st.session_state.current_step == TOTAL_QUESTIONS), use_container_width=True)
-        with n6:
-            st.selectbox(
-                "Pregunta rápida",
-                options=list(range(1, TOTAL_QUESTIONS + 1)),
-                index=st.session_state.current_step - 1,
-                key="quick_question_selector"
-            )
-            if st.button("Abrir pregunta", key="open_quick_question", use_container_width=True):
-                go_to_question(int(st.session_state["quick_question_selector"]))
-
-        # ORGANIZACIÓN DE PREFERENCIAS
-        st.header("Organización de preferencias")
-
-        initial_rank = get_initial_ranking()
-        ahp_rank = current_ahp_ranking(w_crisp)
-
-        rc1, rc2 = st.columns(2)
-        with rc1:
-            st.subheader("Orden inicial del encuestado")
-            for i, c in enumerate(initial_rank, start=1):
-                st.markdown(f"**{i}.** {c}")
-
-        with rc2:
-            st.subheader("Orden actual según AHP")
-            for i, c in enumerate(ahp_rank, start=1):
-                st.markdown(f"**{i}.** {c}")
-
-        st.subheader("Comparación entre orden inicial y orden AHP")
-        st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
-
-    with side_col:
-        st.header("Comparaciones más sensibles")
-        pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
-
-        for p in pairs:
-            st.markdown(f"""
-            <div style="
-            background-color:#111827;
-            border:1px solid #334155;
-            border-left:8px solid #ef4444;
-            padding:14px;
-            border-radius:12px;
-            margin:10px 0;">
-            <b>Pregunta {p['Pregunta']}</b><br>
-            {p['Comparación']}<br>
-            <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
-            </div>
-            """, unsafe_allow_html=True)
-
-            if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_{p['Pregunta']}", use_container_width=True):
-                go_to_question(int(p["Pregunta"]))
+        if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_{p['Pregunta']}", use_container_width=True):
+            go_to_question(int(p["Pregunta"]))
 
 # ============================================================
 # FINALIZAR
