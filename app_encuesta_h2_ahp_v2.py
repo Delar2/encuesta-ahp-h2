@@ -649,57 +649,42 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### Navegador entre preguntas")
+st.markdown("### Navegador entre preguntas")
 
-    row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
-    with row1_col1:
-        st.button("⬅️ Anterior", key="nav_prev_main", on_click=go_prev, use_container_width=True)
+row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
+with row1_col1:
+    st.button("⬅️ Anterior", key="nav_prev_main", on_click=go_prev, use_container_width=True)
 
-    with row1_col2:
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
-            f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
-            f"</div>",
-            unsafe_allow_html=True
-        )
+with row1_col2:
+    st.markdown(
+        f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
+        f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
-    with row1_col3:
-        st.button(
-            "Siguiente ➡️",
-            key="nav_next_main",
-            on_click=go_next,
-            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
-            use_container_width=True
-        )
+with row1_col3:
+    st.button(
+        "Siguiente ➡️",
+        key="nav_next_main",
+        on_click=go_next,
+        disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
+        use_container_width=True
+    )
 
-    row2_col1, row2_col2 = st.columns([1, 1])
-    with row2_col1:
-        st.number_input(
-            "Ir a",
-            min_value=1,
-            max_value=TOTAL_QUESTIONS,
-            value=st.session_state.current_step,
-            step=1,
-            key="goto_number_input"
-        )
+row2_col1, row2_col2 = st.columns([1, 1])
+with row2_col1:
+    st.selectbox(
+        "Pregunta rápida",
+        options=list(range(1, TOTAL_QUESTIONS + 1)),
+        index=st.session_state.current_step - 1,
+        key="quick_question_selector"
+    )
 
-    with row2_col2:
-        if st.button("Ir", key="goto_number_button", use_container_width=True):
-            go_to_question(int(st.session_state["goto_number_input"]))
-
-    row3_col1, row3_col2 = st.columns([1, 1])
-    with row3_col1:
-        st.selectbox(
-            "Pregunta rápida",
-            options=list(range(1, TOTAL_QUESTIONS + 1)),
-            index=st.session_state.current_step - 1,
-            key="quick_question_selector"
-        )
-
-    with row3_col2:
-        if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
-            go_to_question(int(st.session_state["quick_question_selector"]))
-
+with row2_col2:
+    if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
+        go_to_question(int(st.session_state["quick_question_selector"]))
+    
     st.header("Organización de preferencias")
 
     initial_rank = get_initial_ranking()
