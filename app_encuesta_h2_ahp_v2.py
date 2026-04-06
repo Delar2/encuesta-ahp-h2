@@ -57,18 +57,6 @@ def interpret_pair(k, a, b):
         return f"{b_fmt} es más importante que {a_fmt}."
 
 
-def k_to_text(k: int, a: str, b: str) -> str:
-    if k == 5:
-        return f"Iguales ({a} ≈ {b})"
-    if k < 5:
-        return f"Favorece {a} (k={k})"
-    return f"Favorece {b} (k={k})"
-
-
-def invert_slider(k: int) -> int:
-    return 10 - int(k)
-
-
 def pref_text(r: float, left: str, right: str) -> str:
     if r > 1.15:
         return f"**{left}** > **{right}**"
@@ -344,7 +332,7 @@ TOTAL_QUESTIONS = len(COMPARISONS)
 
 
 # ============================================================
-# CÁLCULO GLOBAL DESDE SESSION_STATE
+# CÁLCULO GLOBAL
 # ============================================================
 def collect_all_rows_and_results():
     idx_map = {name: i for i, name in enumerate(CRITERIA)}
@@ -415,16 +403,6 @@ st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
 if "current_question" not in st.session_state:
     st.session_state.current_question = 1
 
-if "pending_updates" not in st.session_state:
-    st.session_state.pending_updates = []
-
-if "last_changes" not in st.session_state:
-    st.session_state.last_changes = []
-
-for qid, new_k in st.session_state.pending_updates:
-    st.session_state[f"k_{qid}"] = int(new_k)
-st.session_state.pending_updates = []
-
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
@@ -438,8 +416,8 @@ Se utiliza el método **AHP** y su extensión **Fuzzy AHP** para comparar criter
 - Cada pantalla muestra **una sola pregunta**.
 - Use la escala de **1 a 9**.
 - **5** significa igualdad de importancia.
-- El indicador de **CR** se actualiza en tiempo real con todas las respuestas actuales.
-- Mientras no termine, el valor de consistencia se interpreta como el estado actual de la matriz con las respuestas guardadas.
+- El indicador de **CR** se actualiza en tiempo real con las respuestas guardadas.
+- **Las respuestas no se corrigen automáticamente**.
 """)
 
 st.header("Datos del participante")
@@ -452,42 +430,33 @@ if not respondent_name.strip() or not profession.strip():
     st.stop()
 
 if not email_enabled():
-    st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no enviará resultados por email.")
+    st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no podrá enviar resultados al email.")
 
-# Inicializar defaults para todos los widgets
 for _, _, qid in COMPARISONS:
     if f"k_{qid}" not in st.session_state:
         st.session_state[f"k_{qid}"] = 5
     if f"conf_{qid}" not in st.session_state:
         st.session_state[f"conf_{qid}"] = CONFIDENCE_OPTIONS[0]
 
-# ============================================================
-# CÁLCULO EN TIEMPO REAL
-# ============================================================
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 ok = CR <= CR_THRESHOLD
 
-# Completar CR nuevo tras rerun por sugerencia
-for c in reversed(st.session_state.last_changes):
-    if c["cr_new"] is None:
-        c["cr_new"] = float(CR)
-        break
-
 # ============================================================
-# PANEL SUPERIOR DE NAVEGACIÓN
+# NAVEGACIÓN
 # ============================================================
 st.header("Navegación")
 
-progress_value = st.session_state.current_question / TOTAL_QUESTIONS
-st.progress(progress_value)
+st.progress(st.session_state.current_question / TOTAL_QUESTIONS)
 st.caption(f"Pregunta {st.session_state.current_question} de {TOTAL_QUESTIONS}")
 
 nav_col1, nav_col2 = st.columns([1, 1])
+
 with nav_col1:
     goto = st.selectbox(
         "Ir a la pregunta",
         options=list(range(1, TOTAL_QUESTIONS + 1)),
-        index=st.session_state.current_question - 1
+        index=st.session_state.current_question - 1,
+        key="goto_question"
     )
     if goto != st.session_state.current_question:
         st.session_state.current_question = goto
@@ -534,7 +503,7 @@ Marque <b>5</b> si cree que ambos son igualmente necesarios.
 </div>
 """, unsafe_allow_html=True)
 
-k = st.slider("Escala de preferencia", 1, 9, key=f"k_{qid}")
+st.slider("Escala de preferencia", 1, 9, key=f"k_{qid}")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -542,8 +511,9 @@ with col1:
 with col2:
     st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
-conf = st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
+st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
 
+k_current = int(st.session_state[f"k_{qid}"])
 st.markdown(f"""
 <div style="
 background-color:#0b1220;
@@ -551,7 +521,7 @@ border-left:8px solid #3b82f6;
 padding:14px;
 border-radius:10px;
 margin-top:10px;">
-<b>Interpretación actual:</b> {interpret_pair(k, a, b)}
+<b>Interpretación actual:</b> {interpret_pair(k_current, a, b)}
 </div>
 """, unsafe_allow_html=True)
 
@@ -580,28 +550,9 @@ with b3:
         st.rerun()
 
 # ============================================================
-# CONSISTENCIA Y SUGERENCIAS
+# SUGERENCIAS SIN AUTOAJUSTE
 # ============================================================
 st.header("Consistencia en tiempo real")
-
-if st.session_state.last_changes:
-    st.subheader("Cambios aplicados")
-    for c in st.session_state.last_changes[-3:]:
-        cr_new_txt = f"{c['cr_new']:.3f}" if c["cr_new"] is not None else "Recalculando..."
-        st.markdown(f"""
-        <div style="
-        background-color:#0b1220;
-        border:1px solid #334155;
-        border-left:8px solid #22c55e;
-        padding:14px;
-        border-radius:12px;
-        margin:10px 0;">
-        <b>Comparación:</b> {c['pair']}<br>
-        <b>Antes:</b> {c['k_old']} — {c['old_txt']}<br>
-        <b>Ahora:</b> {c['k_new']} — {c['new_txt']}<br>
-        <b>CR:</b> {c['cr_old']:.3f} → <b>{cr_new_txt}</b>
-        </div>
-        """, unsafe_allow_html=True)
 
 if not ok:
     conflict = top_conflict_explanation(A_crisp, CRITERIA)
@@ -613,11 +564,10 @@ if not ok:
             f"- pero también {conflict['texts'][2]}"
         )
 
-    st.markdown("### Sugerencias de ajuste")
-    sugg = top_pair_suggestions(A_crisp, CRITERIA, top_n=3)
+    st.markdown("### Comparaciones sugeridas para revisar")
+    st.caption("Estas sugerencias son solo orientativas. El sistema no cambia ninguna respuesta automáticamente.")
 
-    qid_by_pair = {(x, y): q for (x, y, q) in COMPARISONS}
-    qid_by_pair.update({(y, x): q for (x, y, q) in COMPARISONS})
+    sugg = top_pair_suggestions(A_crisp, CRITERIA, top_n=3)
 
     for opt_i, s in enumerate(sugg, start=1):
         left = CRITERIA[s["i"]]
@@ -628,69 +578,24 @@ if not ok:
         <div style="
         background-color:#111827;
         border:1px solid #334155;
-        border-left:8px solid #22c55e;
+        border-left:8px solid #f59e0b;
         padding:16px;
         border-radius:14px;
         margin:12px 0;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-            <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
-            <div style="
-                background-color:#22c55e;
-                color:#111827;
-                padding:8px 12px;
-                border-radius:999px;
-                font-weight:900;
-                font-size:18px;">
-                Mover a: {k_sug}
-            </div>
-        </div>
+        <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
         <div style="margin-top:10px; font-size:16px; line-height:1.55;">
-        <b>Qué ajustar:</b> {left} vs {right}
+        <b>Revisar:</b> {left} vs {right}<br>
+        <b>Valor orientativo:</b> mover hacia {k_sug}
         </div>
         </div>
         """, unsafe_allow_html=True)
 
-        q_apply = qid_by_pair.get((left, right))
-        k_to_set = k_sug
-
-        if q_apply is None:
-            q_apply = qid_by_pair.get((right, left))
-            if q_apply is not None:
-                k_to_set = invert_slider(k_sug)
-
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            if st.button(f"Aplicar sugerencia {opt_i}", key=f"apply_{opt_i}"):
-                key_slider = f"k_{q_apply}"
-                k_old = int(st.session_state.get(key_slider, 5))
-                cr_old = float(CR)
-
-                st.session_state.last_changes.append({
-                    "pair": f"{left} vs {right}",
-                    "k_old": k_old,
-                    "k_new": int(k_to_set),
-                    "old_txt": k_to_text(k_old, left, right),
-                    "new_txt": k_to_text(int(k_to_set), left, right),
-                    "cr_old": cr_old,
-                    "cr_new": None
-                })
-
-                st.session_state.pending_updates.append((q_apply, int(k_to_set)))
-
-                for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
-                    if cqid == q_apply:
-                        st.session_state.current_question = pos
-                        break
-
-                st.rerun()
-
-        with c2:
-            if st.button(f"Ir a esa pregunta {opt_i}", key=f"go_{opt_i}"):
-                for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
-                    if (ca == left and cb == right) or (ca == right and cb == left):
-                        st.session_state.current_question = pos
-                        break
-                st.rerun()
+        if st.button(f"Ir a revisar esa pregunta {opt_i}", key=f"go_{opt_i}"):
+            for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
+                if (ca == left and cb == right) or (ca == right and cb == left):
+                    st.session_state.current_question = pos
+                    break
+            st.rerun()
 
 # ============================================================
 # RESUMEN DE PESOS
@@ -720,7 +625,7 @@ with col_b:
     st.dataframe(df_fuzzy_weights[["Criterio", "Peso_fuzzy_defuzz"]], use_container_width=True)
 
 # ============================================================
-# EXPORTACIÓN
+# ENVÍO FINAL SOLO POR EMAIL
 # ============================================================
 st.header("Finalizar")
 
@@ -728,60 +633,55 @@ if not ok:
     st.error("❌ No puede finalizar mientras el CR sea mayor a 0.10.")
 else:
     if st.button("Enviar respuestas"):
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if not email_enabled():
+            st.error("No se puede enviar el archivo porque faltan los datos SMTP en st.secrets.")
+        else:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        df_pairwise = pd.DataFrame(rows)
-        df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
-        df_pairwise.insert(1, "Profession", profession.strip())
-        df_pairwise.insert(2, "Academic_Level", academic_level)
-        df_pairwise.insert(3, "Timestamp", ts)
+            df_pairwise = pd.DataFrame(rows)
+            df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
+            df_pairwise.insert(1, "Profession", profession.strip())
+            df_pairwise.insert(2, "Academic_Level", academic_level)
+            df_pairwise.insert(3, "Timestamp", ts)
 
-        df_participant = pd.DataFrame([{
-            "Respondent_Name": respondent_name.strip(),
-            "Profession": profession.strip(),
-            "Academic_Level": academic_level,
-            "Timestamp": ts,
-            "CR": float(CR),
-            "Lambda_max": float(lam),
-            "CI": float(CI)
-        }])
+            df_participant = pd.DataFrame([{
+                "Respondent_Name": respondent_name.strip(),
+                "Profession": profession.strip(),
+                "Academic_Level": academic_level,
+                "Timestamp": ts,
+                "CR": float(CR),
+                "Lambda_max": float(lam),
+                "CI": float(CI)
+            }])
 
-        df_cr = pd.DataFrame([{
-            "Respondent_Name": respondent_name.strip(),
-            "Timestamp": ts,
-            "CR": float(CR),
-            "Lambda_max": float(lam),
-            "CI": float(CI)
-        }])
+            df_cr = pd.DataFrame([{
+                "Respondent_Name": respondent_name.strip(),
+                "Timestamp": ts,
+                "CR": float(CR),
+                "Lambda_max": float(lam),
+                "CI": float(CI)
+            }])
 
-        df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
-        df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
-        df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
-        df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
+            df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
+            df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
+            df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
+            df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
 
-        bio = BytesIO()
-        with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-            df_participant.to_excel(writer, index=False, sheet_name="Participante")
-            df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
-            df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
-            df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
-            df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
-            df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
-            df_L.to_excel(writer, sheet_name="Fuzzy_L")
-            df_M.to_excel(writer, sheet_name="Fuzzy_M")
-            df_U.to_excel(writer, sheet_name="Fuzzy_U")
+            bio = BytesIO()
+            with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+                df_participant.to_excel(writer, index=False, sheet_name="Participante")
+                df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
+                df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
+                df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
+                df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
+                df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
+                df_L.to_excel(writer, sheet_name="Fuzzy_L")
+                df_M.to_excel(writer, sheet_name="Fuzzy_M")
+                df_U.to_excel(writer, sheet_name="Fuzzy_U")
 
-        excel_bytes = bio.getvalue()
-        filename = f"AHP_Fuzzy_Medidores_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            excel_bytes = bio.getvalue()
+            filename = f"AHP_Fuzzy_Medidores_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-        st.download_button(
-            label="📥 Descargar archivo Excel",
-            data=excel_bytes,
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-        if email_enabled():
             admin = SECRETS["ADMIN_EMAIL"]
             subject = f"Respuesta AHP/Fuzzy Medidores H2: {respondent_name.strip()}"
             body = (
@@ -793,10 +693,9 @@ else:
                 f"CR: {CR:.4f}\n\n"
                 f"Se adjunta el archivo Excel con respuestas, matrices y pesos."
             )
+
             try:
                 send_email(admin, subject, body, excel_bytes, filename)
-                st.success("✅ Respuestas enviadas correctamente y correo enviado.")
+                st.success("✅ Respuestas enviadas correctamente al email configurado.")
             except Exception as e:
-                st.warning(f"Se generó el archivo, pero no se pudo enviar el correo: {e}")
-        else:
-            st.success("✅ Respuestas procesadas correctamente.")
+                st.error(f"No se pudo enviar el correo: {e}")
