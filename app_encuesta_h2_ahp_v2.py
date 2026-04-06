@@ -35,7 +35,7 @@ CRITERIA = [
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo y sus accesorios",
+    "Costo": "el precio de adquisición del equipo y sus accesorios /n",
     "Rango de detección de H₂": "el intervalo de medición del hidrógeno natural (por ejemplo: ppm o %vol), desde el valor mínimo hasta el máximo",
     "Sensibilidad en la detección de H₂": "la capacidad de detectar bajas concentraciones de hidrógeno natural (ppm o ppb) y pequeñas variaciones en la señal",
     "Detección multigas": "la capacidad de medir simultáneamente otros gases como CH₄ y N₂",
