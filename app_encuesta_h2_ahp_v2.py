@@ -446,7 +446,7 @@ def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
 # ============================================================
 # UI
 # ============================================================
-st.set_page_config(page_title="Encuesta AHP H₂", layout="wide")
+st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
 
 ensure_answer_state()
 
