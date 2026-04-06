@@ -535,7 +535,7 @@ if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
     
     st.image(
-    "imagen_2026-04-06_170515574.png",
+    "imagen_2026-04-06_170743831.png",
     caption="Criterios técnicos para la selección de medidores de hidrógeno",
     use_container_width=True
     )
