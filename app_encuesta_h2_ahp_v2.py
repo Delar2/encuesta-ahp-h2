@@ -528,19 +528,6 @@ step_num = st.session_state.current_step + 1
 st.progress(step_num / TOTAL_STEPS)
 st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.metric("λmax", f"{lam:.4f}")
-with m2:
-    st.metric("CI", f"{CI:.4f}")
-with m3:
-    st.metric("CR global", f"{CR:.4f}")
-
-if ok:
-    st.success("✅ Consistencia global aceptable.")
-else:
-    st.warning("⚠️ La consistencia global aún es alta.")
-
 # ============================================================
 # PASO 0
 # ============================================================
@@ -707,6 +694,21 @@ else:
 
     st.subheader("Comparación entre orden inicial y orden AHP")
     st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
+
+    st.header("Consistencia global")
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("λmax", f"{lam:.4f}")
+    with m2:
+        st.metric("CI", f"{CI:.4f}")
+    with m3:
+        st.metric("CR global", f"{CR:.4f}")
+
+    if ok:
+        st.success("✅ Consistencia global aceptable.")
+    else:
+        st.warning("⚠️ La consistencia global aún es alta.")
 
     st.header("Comparaciones más sensibles")
     pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
