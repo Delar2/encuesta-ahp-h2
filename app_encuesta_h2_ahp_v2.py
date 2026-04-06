@@ -244,6 +244,11 @@ def ensure_answer_state():
     if "initial_ranking" not in st.session_state:
         st.session_state["initial_ranking"] = CRITERIA[:]
 
+    if "pending_question_load" not in st.session_state:
+        st.session_state["pending_question_load"] = False
+
+    if "ui_loaded_qid" not in st.session_state:
+        st.session_state["ui_loaded_qid"] = None
 
 def load_current_question_into_ui(force: bool = False):
     if st.session_state.current_step == 0:
@@ -461,9 +466,15 @@ st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
 
 ensure_answer_state()
 
-if "ui_k" not in st.session_state or "ui_conf" not in st.session_state:
-    if st.session_state.current_step > 0:
-        load_current_question_into_ui()
+if st.session_state.current_step > 0:
+    if (
+        "ui_k" not in st.session_state
+        or "ui_conf" not in st.session_state
+        or st.session_state.get("pending_question_load", False)
+    ):
+        load_current_question_into_ui(force=True)
+        st.session_state["pending_question_load"] = False
+
 
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
@@ -495,7 +506,12 @@ if not respondent_name.strip() or not profession.strip():
 if not email_enabled():
     st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no podrá enviar resultados al email.")
 
-if st.session_state.current_step > 0 and "ui_k" in st.session_state and "ui_conf" in st.session_state:
+if (
+    st.session_state.current_step > 0
+    and "ui_k" in st.session_state
+    and "ui_conf" in st.session_state
+    and not st.session_state.get("pending_question_load", False)
+):
     save_current_question_from_ui()
 
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
@@ -615,92 +631,55 @@ else:
     """, unsafe_allow_html=True)
 
     # NAVEGADOR JUSTO DEBAJO DE LA PREGUNTA
-    st.markdown("### Navegador entre preguntas")
-    n1, n2, n3, n4 = st.columns([1, 2, 1, 1])
+st.markdown("### Navegador entre preguntas")
 
-    with n1:
-        st.button("⬅️ Anterior", on_click=go_prev, use_container_width=True)
+row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
+with row1_col1:
+    st.button("⬅️ Anterior", on_click=go_prev, use_container_width=True)
 
-    with n2:
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}</div>",
-            unsafe_allow_html=True
-        )
+with row1_col2:
+    st.markdown(
+        f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
+        f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
-    with n3:
-        st.number_input(
-            "Ir a",
-            min_value=1,
-            max_value=TOTAL_QUESTIONS,
-            value=st.session_state.current_step,
-            step=1,
-            key="goto_number_input"
-        )
+with row1_col3:
+    st.button(
+        "Siguiente ➡️",
+        on_click=go_next,
+        disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
+        use_container_width=True
+    )
 
-    with n4:
-        if st.button("Ir", use_container_width=True):
-            go_to_question(int(st.session_state["goto_number_input"]))
+row2_col1, row2_col2 = st.columns([1, 1])
+with row2_col1:
+    st.number_input(
+        "Ir a",
+        min_value=1,
+        max_value=TOTAL_QUESTIONS,
+        value=st.session_state.current_step,
+        step=1,
+        key="goto_number_input"
+    )
 
-    n5, n6 = st.columns([1, 1])
-    with n5:
-        st.button(
-            "Siguiente ➡️",
-            on_click=go_next,
-            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
-            use_container_width=True
-        )
+with row2_col2:
+    if st.button("Ir", use_container_width=True):
+        go_to_question(int(st.session_state["goto_number_input"]))
 
-    with n6:
-        st.selectbox(
-            "Pregunta rápida",
-            options=list(range(1, TOTAL_QUESTIONS + 1)),
-            index=st.session_state.current_step - 1,
-            key="quick_question_selector"
-        )
-        if st.button("Abrir pregunta", key="open_quick_question", use_container_width=True):
-            go_to_question(int(st.session_state["quick_question_selector"]))
+row3_col1, row3_col2 = st.columns([1, 1])
+with row3_col1:
+    st.selectbox(
+        "Pregunta rápida",
+        options=list(range(1, TOTAL_QUESTIONS + 1)),
+        index=st.session_state.current_step - 1,
+        key="quick_question_selector"
+    )
 
-    # ORGANIZACIÓN DE PREFERENCIAS
-    st.header("Organización de preferencias")
-
-    initial_rank = get_initial_ranking()
-    ahp_rank = current_ahp_ranking(w_crisp)
-
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        st.subheader("Orden inicial del encuestado")
-        for i, c in enumerate(initial_rank, start=1):
-            st.markdown(f"**{i}.** {c}")
-
-    with rc2:
-        st.subheader("Orden actual según AHP")
-        for i, c in enumerate(ahp_rank, start=1):
-            st.markdown(f"**{i}.** {c}")
-
-    st.subheader("Comparación entre orden inicial y orden AHP")
-    st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
-
-    # COMPARACIONES MÁS SENSIBLES ABAJO
-    st.header("Comparaciones más sensibles")
-    pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
-
-    for p in pairs:
-        st.markdown(f"""
-        <div style="
-        background-color:#111827;
-        border:1px solid #334155;
-        border-left:8px solid #ef4444;
-        padding:14px;
-        border-radius:12px;
-        margin:10px 0;">
-        <b>Pregunta {p['Pregunta']}</b><br>
-        {p['Comparación']}<br>
-        <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_{p['Pregunta']}", use_container_width=True):
-            go_to_question(int(p["Pregunta"]))
+with row3_col2:
+    if st.button("Abrir pregunta", key="open_quick_question", use_container_width=True):
+        go_to_question(int(st.session_state["quick_question_selector"]))
 
 # ============================================================
 # FINALIZAR
