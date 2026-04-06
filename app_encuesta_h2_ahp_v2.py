@@ -269,44 +269,6 @@ def go_prev():
 
 
 # ============================================================
-# MÉTRICAS DE IMPACTO
-# ============================================================
-def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
-    n = A.shape[0]
-    errs = []
-
-    for k in range(n):
-        if k == pair_i or k == pair_j:
-            continue
-        implied_ij = A[pair_i, k] / A[pair_j, k]
-        err = abs(np.log(A[pair_i, pair_j]) - np.log(implied_ij))
-        errs.append(err)
-
-    if not errs:
-        return 0.0
-    return float(np.mean(errs))
-
-
-def pair_cr_without_current(A: np.ndarray, pair_i: int, pair_j: int):
-    implied = []
-    n = A.shape[0]
-
-    for k in range(n):
-        if k == pair_i or k == pair_j:
-            continue
-        implied.append(A[pair_i, k] / A[pair_j, k])
-
-    if not implied:
-        return ahp_cr(A)[2]
-
-    implied_ratio = float(np.exp(np.mean(np.log(implied))))
-    A2 = A.copy()
-    A2[pair_i, pair_j] = implied_ratio
-    A2[pair_j, pair_i] = 1.0 / implied_ratio
-    return ahp_cr(A2)[2]
-
-
-# ============================================================
 # RECOLECTAR RESULTADOS
 # ============================================================
 def collect_all_rows_and_results():
@@ -467,21 +429,6 @@ margin-top:10px;">
 <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
 </div>
 """, unsafe_allow_html=True)
-
-st.header("Impacto de esta pregunta en la consistencia")
-local_err = pair_local_inconsistency(A_crisp, i, j)
-cr_without_current = pair_cr_without_current(A_crisp, i, j)
-delta_cr = CR - cr_without_current
-
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.metric("CR global actual", f"{CR:.4f}")
-with m2:
-    st.metric("CR si esta pregunta estuviera alineada", f"{cr_without_current:.4f}")
-with m3:
-    st.metric("Impacto estimado", f"{delta_cr:+.4f}")
-
-st.caption(f"Error local promedio de esta comparación en sus tríadas: {local_err:.4f}")
 
 st.markdown("### Navegador entre preguntas")
 b1, b2, b3 = st.columns([1, 2, 1])
