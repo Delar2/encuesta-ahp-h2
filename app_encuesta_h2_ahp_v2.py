@@ -9,7 +9,7 @@ from itertools import combinations
 # ============================================================
 # CONFIGURACIÓN GENERAL
 # ============================================================
-CR_THRESHOLD = 0.10  # fijo
+CR_THRESHOLD = 0.10
 
 RI_TABLE = {
     1: 0.00, 2: 0.00, 3: 0.58, 4: 0.90, 5: 1.12,
@@ -22,7 +22,6 @@ CONFIDENCE_DELTAS = {
     "Poco seguro": 2.0
 }
 CONFIDENCE_OPTIONS = list(CONFIDENCE_DELTAS.keys())
-
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 
 CRITERIA = [
@@ -35,7 +34,7 @@ CRITERIA = [
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo y sus accesorios /n",
+    "Costo": "el precio de adquisición del equipo y sus accesorios",
     "Rango de detección de H₂": "el intervalo de medición del hidrógeno natural (por ejemplo: ppm o %vol), desde el valor mínimo hasta el máximo",
     "Sensibilidad en la detección de H₂": "la capacidad de detectar bajas concentraciones de hidrógeno natural (ppm o ppb) y pequeñas variaciones en la señal",
     "Detección multigas": "la capacidad de medir simultáneamente otros gases como CH₄ y N₂",
@@ -50,7 +49,6 @@ DEFINICIONES = {
 def interpret_pair(k, a, b):
     a_fmt = f"<b><u>{a}</u></b>"
     b_fmt = f"<b><u>{b}</u></b>"
-
     if k == 5:
         return f"{a_fmt} y {b_fmt} tienen importancia similar."
     elif k < 5:
@@ -98,25 +96,18 @@ ANCHOR_R = np.array([9, 7, 5, 3, 1, 1/3, 1/5, 1/7, 1/9], dtype=float)
 
 
 def ratio_from_k(k: float) -> float:
-    """
-    Mapeo continuo de k (1..9) -> ratio A/B
-    usando interpolación log-lineal entre anclas.
-    """
     k = clamp(float(k), 1.0, 9.0)
-
     if float(int(k)) == k:
         return float(ANCHOR_R[int(k) - 1])
 
     i = int(np.floor(k))
     j = int(np.ceil(k))
-
     if i == j:
         return float(ANCHOR_R[i - 1])
 
     ri = ANCHOR_R[i - 1]
     rj = ANCHOR_R[j - 1]
     t = (k - i) / (j - i)
-
     return float(np.exp((1 - t) * np.log(ri) + t * np.log(rj)))
 
 
@@ -163,10 +154,6 @@ def ratio_to_slider_nearest(r: float) -> int:
 
 
 def top_pair_suggestions(A: np.ndarray, items: list, top_n: int = 3):
-    """
-    Para n>=4: encuentra qué comparaciones aportan más a la inconsistencia,
-    agregando errores de tríadas. Devuelve top_n sugerencias con k recomendado.
-    """
     n = A.shape[0]
     acc = {}
 
@@ -217,9 +204,6 @@ def top_pair_suggestions(A: np.ndarray, items: list, top_n: int = 3):
 
 
 def top_conflict_explanation(A: np.ndarray, items: list):
-    """
-    Devuelve una explicación humana para la tríada más conflictiva.
-    """
     n = A.shape[0]
     best = None
     best_err = -1.0
@@ -249,7 +233,7 @@ def top_conflict_explanation(A: np.ndarray, items: list):
 
 
 # ============================================================
-# FUZZY AHP (TFN)
+# FUZZY AHP
 # ============================================================
 def tfn_mul(a, b):
     return (a[0] * b[0], a[1] * b[1], a[2] * b[2])
@@ -296,7 +280,7 @@ def fuzzy_weights_geometric_mean(fuzzy_A):
 
 
 # ============================================================
-# SECRETS / EMAIL
+# EMAIL
 # ============================================================
 def get_secrets_safe():
     try:
@@ -346,51 +330,119 @@ def send_email(to_email: str, subject: str, body: str, attachment_bytes: bytes, 
 
 
 # ============================================================
-# ESTRUCTURA DE LA ENCUESTA
+# ESTRUCTURA ENCUESTA
 # ============================================================
 def generate_comparisons(criteria):
     comps = []
     for idx, (a, b) in enumerate(combinations(criteria, 2), start=1):
-        qid = f"Q{idx}"
-        comps.append((a, b, qid))
+        comps.append((a, b, f"Q{idx}"))
     return comps
 
 
 COMPARISONS = generate_comparisons(CRITERIA)
+TOTAL_QUESTIONS = len(COMPARISONS)
 
 
 # ============================================================
-# UI BASE
+# CÁLCULO GLOBAL DESDE SESSION_STATE
+# ============================================================
+def collect_all_rows_and_results():
+    idx_map = {name: i for i, name in enumerate(CRITERIA)}
+    crisp_answers = {}
+    rows = []
+
+    for q_num, (a, b, qid) in enumerate(COMPARISONS, start=1):
+        k = int(st.session_state.get(f"k_{qid}", 5))
+        conf = st.session_state.get(f"conf_{qid}", CONFIDENCE_OPTIONS[0])
+
+        r_crisp = slider_to_ratio_int(k)
+        i, j = idx_map[a], idx_map[b]
+        crisp_answers[(i, j)] = r_crisp
+
+        d = CONFIDENCE_DELTAS[conf]
+        k_l = clamp(k - d, 1.0, 9.0)
+        k_m = float(k)
+        k_u = clamp(k + d, 1.0, 9.0)
+
+        r_l = ratio_from_k(k_u)
+        r_m = ratio_from_k(k_m)
+        r_u = ratio_from_k(k_l)
+
+        rows.append({
+            "Question_Number": q_num,
+            "Question_ID": qid,
+            "Criterion_A": a,
+            "Criterion_B": b,
+            "k": k,
+            "Confidence": conf,
+            "Delta": float(d),
+            "TFN_k_l": float(k_l),
+            "TFN_k_m": float(k_m),
+            "TFN_k_u": float(k_u),
+            "Ratio_crisp_for_CR": float(r_crisp),
+            "TFN_ratio_l": float(r_l),
+            "TFN_ratio_m": float(r_m),
+            "TFN_ratio_u": float(r_u),
+        })
+
+    A_crisp = build_matrix(len(CRITERIA), crisp_answers)
+    lam, CI, CR = ahp_cr(A_crisp)
+    w_crisp = ahp_weights_eigen(A_crisp)
+
+    n = len(CRITERIA)
+    L = np.ones((n, n), dtype=float)
+    M = np.ones((n, n), dtype=float)
+    U = np.ones((n, n), dtype=float)
+
+    for r in rows:
+        i = idx_map[r["Criterion_A"]]
+        j = idx_map[r["Criterion_B"]]
+        l, m, u = r["TFN_ratio_l"], r["TFN_ratio_m"], r["TFN_ratio_u"]
+        L[i, j], M[i, j], U[i, j] = l, m, u
+        L[j, i], M[j, i], U[j, i] = 1.0 / u, 1.0 / m, 1.0 / l
+
+    fuzzy_A = [[(L[i, j], M[i, j], U[i, j]) for j in range(n)] for i in range(n)]
+    w_fuzzy_tfn, w_fuzzy_def = fuzzy_weights_geometric_mean(fuzzy_A)
+
+    return rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def
+
+
+# ============================================================
+# UI
 # ============================================================
 st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
+
+if "current_question" not in st.session_state:
+    st.session_state.current_question = 1
+
+if "pending_updates" not in st.session_state:
+    st.session_state.pending_updates = []
+
+if "last_changes" not in st.session_state:
+    st.session_state.last_changes = []
+
+for qid, new_k in st.session_state.pending_updates:
+    st.session_state[f"k_{qid}"] = int(new_k)
+st.session_state.pending_updates = []
+
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
 ### Descripción de la encuesta
+Esta encuesta busca identificar los criterios técnicos más relevantes para la **selección de medidores para la detección de hidrógeno natural en campo**.
 
-Esta encuesta tiene como objetivo determinar, de manera estructurada y transparente, cuáles son los criterios técnicos más relevantes para la **selección de medidores para la detección de hidrógeno natural en campo**.
+Se utiliza el método **AHP** y su extensión **Fuzzy AHP** para comparar criterios por pares e incorporar la incertidumbre del experto.
 
-Para establecer la importancia relativa de los criterios se utiliza el método **AHP (Analytic Hierarchy Process)** y su extensión **Fuzzy AHP**, lo que permite incorporar también la incertidumbre asociada a las decisiones de los expertos.
-
-Los pesos obtenidos representarán las prioridades técnicas del estudio y podrán ser utilizados posteriormente en un modelo de optimización para seleccionar la mejor combinación de equipos, considerando tanto el desempeño técnico como las restricciones económicas del proyecto.
-
-### Consideraciones importantes
-- No existe una respuesta correcta o incorrecta.
-- Las comparaciones deben realizarse pensando en: **¿Qué criterio es más importante para garantizar la calidad técnica en la caracterización de filtraciones de hidrógeno?**
-- La escala va de **1 a 9**.
-- **5** indica que ambos criterios tienen igual importancia.
-- Valores hacia la izquierda favorecen el criterio de la izquierda.
-- Valores hacia la derecha favorecen el criterio de la derecha.
-- También deberá indicar su **nivel de confianza** en cada comparación.
-- El sistema verificará automáticamente la **consistencia** de sus respuestas (**CR ≤ 0.10**).
+### Instrucciones
+- Cada pantalla muestra **una sola pregunta**.
+- Use la escala de **1 a 9**.
+- **5** significa igualdad de importancia.
+- El indicador de **CR** se actualiza en tiempo real con todas las respuestas actuales.
+- Mientras no termine, el valor de consistencia se interpreta como el estado actual de la matriz con las respuestas guardadas.
 """)
 
-# ============================================================
-# DATOS DEL ENCUESTADO
-# ============================================================
 st.header("Datos del participante")
-
 respondent_name = st.text_input("Nombre completo *", value="", placeholder="Ej: Juan Pardo")
 profession = st.text_input("Profesión *", value="", placeholder="Ej: Ingeniero químico")
 academic_level = st.selectbox("Nivel máximo de formación académica *", ACADEMIC_LEVELS)
@@ -400,157 +452,142 @@ if not respondent_name.strip() or not profession.strip():
     st.stop()
 
 if not email_enabled():
-    st.warning("⚠️ Correo no configurado (faltan Secrets). La encuesta funciona, pero no enviará resultados por email.")
+    st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no enviará resultados por email.")
 
-if "pending_updates" not in st.session_state:
-    st.session_state.pending_updates = []
-
-if "last_changes" not in st.session_state:
-    st.session_state.last_changes = []
-
-
-# ============================================================
-# APLICAR ACTUALIZACIONES PENDIENTES ANTES DE CREAR WIDGETS
-# ============================================================
-for qid, new_k in st.session_state.pending_updates:
-    st.session_state[f"k_{qid}"] = int(new_k)
-st.session_state.pending_updates = []
-
+# Inicializar defaults para todos los widgets
+for _, _, qid in COMPARISONS:
+    if f"k_{qid}" not in st.session_state:
+        st.session_state[f"k_{qid}"] = 5
+    if f"conf_{qid}" not in st.session_state:
+        st.session_state[f"conf_{qid}"] = CONFIDENCE_OPTIONS[0]
 
 # ============================================================
-# ENCUESTA PRINCIPAL
+# CÁLCULO EN TIEMPO REAL
 # ============================================================
-st.header("Comparaciones pareadas")
+rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
+ok = CR <= CR_THRESHOLD
 
-idx = {name: i for i, name in enumerate(CRITERIA)}
-qid_by_pair = {(a, b): qid for (a, b, qid) in COMPARISONS}
-qid_by_pair.update({(b, a): qid for (a, b, qid) in COMPARISONS})
-
-crisp_answers = {}
-rows = []
-
-for q_num, (a, b, qid) in enumerate(COMPARISONS, start=1):
-    st.subheader(f"Pregunta #{q_num}: {a} vs {b}")
-
-    def_a = DEFINICIONES.get(a, "—")
-    def_b = DEFINICIONES.get(b, "—")
-
-    st.markdown(f"""
-    <div style="
-    background-color:#1f2937;
-    padding:15px;
-    border-radius:10px;
-    border-left:6px solid #22c55e;
-    font-size:16px;
-    line-height:1.6;">
-
-    Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
-    <br><br>
-    Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
-    <br>
-    Marque <b>5</b> si cree que ambos son igualmente necesarios.
-
-    </div>
-    """, unsafe_allow_html=True)
-
-    k = st.slider("Escala de preferencia", 1, 9, 5, 1, key=f"k_{qid}")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
-
-    conf = st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
-
-    # Crisp para CR
-    r_crisp = slider_to_ratio_int(int(k))
-    i, j = idx[a], idx[b]
-    crisp_answers[(i, j)] = r_crisp
-
-    # Fuzzy
-    d = CONFIDENCE_DELTAS[conf]
-    k_l = clamp(k - d, 1.0, 9.0)
-    k_m = float(k)
-    k_u = clamp(k + d, 1.0, 9.0)
-
-    # Convertir a ratio TFN
-    r_l = ratio_from_k(k_u)
-    r_m = ratio_from_k(k_m)
-    r_u = ratio_from_k(k_l)
-
-    rows.append({
-        "Respondent_Name": respondent_name.strip(),
-        "Profession": profession.strip(),
-        "Academic_Level": academic_level,
-        "Criterion_A": a,
-        "Criterion_B": b,
-        "Question_ID": qid,
-        "k": int(k),
-        "Confidence": conf,
-        "Delta": float(d),
-        "TFN_k_l": float(k_l),
-        "TFN_k_m": float(k_m),
-        "TFN_k_u": float(k_u),
-        "Ratio_crisp_for_CR": float(r_crisp),
-        "TFN_ratio_l": float(r_l),
-        "TFN_ratio_m": float(r_m),
-        "TFN_ratio_u": float(r_u),
-    })
-
-    st.divider()
-
-
-# ============================================================
-# CÁLCULOS
-# ============================================================
-A_crisp = build_matrix(len(CRITERIA), crisp_answers)
-lam, CI, CR = ahp_cr(A_crisp)
-w_crisp = ahp_weights_eigen(A_crisp)
-
-# Completar CR nuevo si hubo cambio aplicado
+# Completar CR nuevo tras rerun por sugerencia
 for c in reversed(st.session_state.last_changes):
     if c["cr_new"] is None:
         c["cr_new"] = float(CR)
         break
 
-# Fuzzy matrices
-n = len(CRITERIA)
-L = np.ones((n, n), dtype=float)
-M = np.ones((n, n), dtype=float)
-U = np.ones((n, n), dtype=float)
+# ============================================================
+# PANEL SUPERIOR DE NAVEGACIÓN
+# ============================================================
+st.header("Navegación")
 
-for r in rows:
-    i = idx[r["Criterion_A"]]
-    j = idx[r["Criterion_B"]]
-    l, m, u = r["TFN_ratio_l"], r["TFN_ratio_m"], r["TFN_ratio_u"]
+progress_value = st.session_state.current_question / TOTAL_QUESTIONS
+st.progress(progress_value)
+st.caption(f"Pregunta {st.session_state.current_question} de {TOTAL_QUESTIONS}")
 
-    L[i, j], M[i, j], U[i, j] = l, m, u
-    L[j, i], M[j, i], U[j, i] = 1.0 / u, 1.0 / m, 1.0 / l
+nav_col1, nav_col2 = st.columns([1, 1])
+with nav_col1:
+    goto = st.selectbox(
+        "Ir a la pregunta",
+        options=list(range(1, TOTAL_QUESTIONS + 1)),
+        index=st.session_state.current_question - 1
+    )
+    if goto != st.session_state.current_question:
+        st.session_state.current_question = goto
+        st.rerun()
 
-fuzzy_A = [[(L[i, j], M[i, j], U[i, j]) for j in range(n)] for i in range(n)]
-w_fuzzy_tfn, w_fuzzy_def = fuzzy_weights_geometric_mean(fuzzy_A)
+with nav_col2:
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("λmax", f"{lam:.4f}")
+    mc2.metric("CI", f"{CI:.4f}")
+    mc3.metric("CR actual", f"{CR:.4f}")
 
+if ok:
+    st.success("✅ Consistencia aceptable.")
+else:
+    st.error("❌ Consistencia alta. Revise algunas comparaciones.")
 
 # ============================================================
-# MÉTRICAS Y FEEDBACK
+# PREGUNTA ACTUAL
 # ============================================================
-st.header("Consistencia")
+current_idx = st.session_state.current_question - 1
+a, b, qid = COMPARISONS[current_idx]
 
-c1, c2, c3 = st.columns(3)
-c1.metric("λmax", f"{lam:.4f}")
-c2.metric("CI", f"{CI:.4f}")
-c3.metric("CR", f"{CR:.4f}")
+st.header(f"Pregunta #{st.session_state.current_question}")
+st.subheader(f"{a} vs {b}")
 
-recent = st.session_state.last_changes
-if recent:
+def_a = DEFINICIONES.get(a, "—")
+def_b = DEFINICIONES.get(b, "—")
+
+st.markdown(f"""
+<div style="
+background-color:#1f2937;
+padding:15px;
+border-radius:10px;
+border-left:6px solid #22c55e;
+font-size:16px;
+line-height:1.6;">
+
+Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
+<br><br>
+Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
+<br>
+Marque <b>5</b> si cree que ambos son igualmente necesarios.
+
+</div>
+""", unsafe_allow_html=True)
+
+k = st.slider("Escala de preferencia", 1, 9, key=f"k_{qid}")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
+with col2:
+    st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+
+conf = st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
+
+st.markdown(f"""
+<div style="
+background-color:#0b1220;
+border-left:8px solid #3b82f6;
+padding:14px;
+border-radius:10px;
+margin-top:10px;">
+<b>Interpretación actual:</b> {interpret_pair(k, a, b)}
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
+# BOTONES ANTERIOR / SIGUIENTE
+# ============================================================
+st.markdown("### Navegador entre preguntas")
+b1, b2, b3 = st.columns([1, 2, 1])
+
+with b1:
+    if st.button("⬅️ Anterior", disabled=(st.session_state.current_question == 1), use_container_width=True):
+        st.session_state.current_question -= 1
+        st.rerun()
+
+with b2:
+    st.markdown(
+        f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
+        f"Pregunta {st.session_state.current_question} / {TOTAL_QUESTIONS}"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+
+with b3:
+    if st.button("Siguiente ➡️", disabled=(st.session_state.current_question == TOTAL_QUESTIONS), use_container_width=True):
+        st.session_state.current_question += 1
+        st.rerun()
+
+# ============================================================
+# CONSISTENCIA Y SUGERENCIAS
+# ============================================================
+st.header("Consistencia en tiempo real")
+
+if st.session_state.last_changes:
     st.subheader("Cambios aplicados")
-    for c in recent[-3:]:
-        if c["cr_new"] is None:
-            cr_new_txt = "Recalculando..."
-        else:
-            cr_new_txt = f"{c['cr_new']:.3f}"
-
+    for c in st.session_state.last_changes[-3:]:
+        cr_new_txt = f"{c['cr_new']:.3f}" if c["cr_new"] is not None else "Recalculando..."
         st.markdown(f"""
         <div style="
         background-color:#0b1220;
@@ -559,40 +596,28 @@ if recent:
         padding:14px;
         border-radius:12px;
         margin:10px 0;">
-
         <b>Comparación:</b> {c['pair']}<br>
         <b>Antes:</b> {c['k_old']} — {c['old_txt']}<br>
         <b>Ahora:</b> {c['k_new']} — {c['new_txt']}<br>
         <b>CR:</b> {c['cr_old']:.3f} → <b>{cr_new_txt}</b>
-
         </div>
         """, unsafe_allow_html=True)
 
-ok = CR <= CR_THRESHOLD
-
-if ok:
-    st.success("✅ Consistencia aceptable. Puede finalizar la encuesta.")
-else:
-    st.error("❌ La consistencia es alta. Ajuste algunas comparaciones antes de finalizar.")
-
+if not ok:
     conflict = top_conflict_explanation(A_crisp, CRITERIA)
     if conflict:
         st.markdown("### ¿Qué está pasando?")
-        st.markdown(
-            "Hay una contradicción en una tríada de comparaciones (regla de transitividad). "
-            "Por ejemplo, una parte de sus respuestas se interpreta así:"
-        )
         st.markdown(
             f"- {conflict['texts'][0]}\n"
             f"- {conflict['texts'][1]}\n"
             f"- pero también {conflict['texts'][2]}"
         )
-        st.caption("Esto hace que el sistema no pueda asignar pesos completamente coherentes sin ajustar alguna comparación.")
 
     st.markdown("### Sugerencias de ajuste")
-    st.markdown("Elija una sugerencia y ajuste solo esa comparación, o aplíquela automáticamente.")
-
     sugg = top_pair_suggestions(A_crisp, CRITERIA, top_n=3)
+
+    qid_by_pair = {(x, y): q for (x, y, q) in COMPARISONS}
+    qid_by_pair.update({(y, x): q for (x, y, q) in COMPARISONS})
 
     for opt_i, s in enumerate(sugg, start=1):
         left = CRITERIA[s["i"]]
@@ -607,42 +632,36 @@ else:
         padding:16px;
         border-radius:14px;
         margin:12px 0;">
-
         <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-        <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
-        <div style="
-            background-color:#22c55e;
-            color:#111827;
-            padding:8px 12px;
-            border-radius:999px;
-            font-weight:900;
-            font-size:18px;">
-            Mover a: {k_sug}
+            <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
+            <div style="
+                background-color:#22c55e;
+                color:#111827;
+                padding:8px 12px;
+                border-radius:999px;
+                font-weight:900;
+                font-size:18px;">
+                Mover a: {k_sug}
+            </div>
         </div>
-        </div>
-
         <div style="margin-top:10px; font-size:16px; line-height:1.55;">
         <b>Qué ajustar:</b> {left} vs {right}
         </div>
-
-        <div style="margin-top:10px; font-size:14px; color:#cbd5e1;">
-        Tip: Ajuste solo esta comparación y vuelva a revisar el CR.
-        </div>
-
         </div>
         """, unsafe_allow_html=True)
 
-        qid = qid_by_pair.get((left, right))
+        q_apply = qid_by_pair.get((left, right))
         k_to_set = k_sug
 
-        if qid is None:
-            qid = qid_by_pair.get((right, left))
-            if qid is not None:
+        if q_apply is None:
+            q_apply = qid_by_pair.get((right, left))
+            if q_apply is not None:
                 k_to_set = invert_slider(k_sug)
 
-        if qid is not None:
+        c1, c2 = st.columns([1, 1])
+        with c1:
             if st.button(f"Aplicar sugerencia {opt_i}", key=f"apply_{opt_i}"):
-                key_slider = f"k_{qid}"
+                key_slider = f"k_{q_apply}"
                 k_old = int(st.session_state.get(key_slider, 5))
                 cr_old = float(CR)
 
@@ -656,35 +675,22 @@ else:
                     "cr_new": None
                 })
 
-                st.session_state.pending_updates.append((qid, int(k_to_set)))
+                st.session_state.pending_updates.append((q_apply, int(k_to_set)))
+
+                for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
+                    if cqid == q_apply:
+                        st.session_state.current_question = pos
+                        break
+
                 st.rerun()
 
-    st.info("Guía rápida: 1 favorece el criterio de la izquierda, 9 favorece el de la derecha, 5 = iguales.")
-
-
-# ============================================================
-# INTERPRETACIÓN DE RESPUESTAS
-# ============================================================
-items_html = ""
-for a, b, qid in COMPARISONS:
-    k = st.session_state.get(f"k_{qid}", 5)
-    txt = interpret_pair(k, a, b)
-    items_html += f"<li style='margin:6px 0;'>{txt}</li>"
-
-st.markdown(f"""
-<div style="
-background-color:#0b1220;
-border-left:8px solid #3b82f6;
-padding:16px;
-border-radius:10px;
-margin-top:10px;">
-<b style="font-size:18px;">Interpretación de sus respuestas</b>
-<ul style="margin-top:10px; margin-bottom:0; padding-left:22px;">
-{items_html}
-</ul>
-</div>
-""", unsafe_allow_html=True)
-
+        with c2:
+            if st.button(f"Ir a esa pregunta {opt_i}", key=f"go_{opt_i}"):
+                for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
+                    if (ca == left and cb == right) or (ca == right and cb == left):
+                        st.session_state.current_question = pos
+                        break
+                st.rerun()
 
 # ============================================================
 # RESUMEN DE PESOS
@@ -705,7 +711,6 @@ df_fuzzy_weights = pd.DataFrame({
 }).sort_values("Peso_fuzzy_defuzz", ascending=False)
 
 col_a, col_b = st.columns(2)
-
 with col_a:
     st.subheader("Pesos crisp")
     st.dataframe(df_crisp_weights, use_container_width=True)
@@ -714,9 +719,8 @@ with col_b:
     st.subheader("Pesos fuzzy")
     st.dataframe(df_fuzzy_weights[["Criterio", "Peso_fuzzy_defuzz"]], use_container_width=True)
 
-
 # ============================================================
-# EXPORTACIÓN Y ENVÍO FINAL
+# EXPORTACIÓN
 # ============================================================
 st.header("Finalizar")
 
@@ -727,7 +731,10 @@ else:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         df_pairwise = pd.DataFrame(rows)
-        df_pairwise.insert(1, "Timestamp", ts)
+        df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
+        df_pairwise.insert(1, "Profession", profession.strip())
+        df_pairwise.insert(2, "Academic_Level", academic_level)
+        df_pairwise.insert(3, "Timestamp", ts)
 
         df_participant = pd.DataFrame([{
             "Respondent_Name": respondent_name.strip(),
