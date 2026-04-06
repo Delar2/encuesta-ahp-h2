@@ -44,7 +44,7 @@ DEFINICIONES = {
 
 
 # ============================================================
-# UTILIDADES DE TEXTO
+# FUNCIONES DE TEXTO
 # ============================================================
 def interpret_pair(k, a, b):
     a_fmt = f"<b><u>{a}</u></b>"
@@ -57,16 +57,8 @@ def interpret_pair(k, a, b):
         return f"{b_fmt} es más importante que {a_fmt}."
 
 
-def pref_text(r: float, left: str, right: str) -> str:
-    if r > 1.15:
-        return f"**{left}** > **{right}**"
-    if r < (1 / 1.15):
-        return f"**{right}** > **{left}**"
-    return f"**{left}** ≈ **{right}**"
-
-
 # ============================================================
-# UTILIDADES MATEMÁTICAS
+# FUNCIONES MATEMÁTICAS
 # ============================================================
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
@@ -126,98 +118,6 @@ def ahp_weights_eigen(A: np.ndarray) -> np.ndarray:
     w = np.abs(vecs[:, idx].real)
     w = w / w.sum()
     return w
-
-
-def ratio_to_slider_nearest(r: float) -> int:
-    mapping = {
-        1: 9, 2: 7, 3: 5, 4: 3, 5: 1,
-        6: 1/3, 7: 1/5, 8: 1/7, 9: 1/9
-    }
-    best_k, best_err = 5, float("inf")
-    for k, rk in mapping.items():
-        err = abs(np.log(r) - np.log(rk))
-        if err < best_err:
-            best_k, best_err = k, err
-    return best_k
-
-
-def top_pair_suggestions(A: np.ndarray, items: list, top_n: int = 3):
-    n = A.shape[0]
-    acc = {}
-
-    def add_suggestion(i, k, implied_ratio, weight):
-        if i > k:
-            i, k = k, i
-            implied_ratio = 1.0 / implied_ratio
-        key = (i, k)
-        if key not in acc:
-            acc[key] = {"w": 0.0, "logr": 0.0}
-        acc[key]["w"] += weight
-        acc[key]["logr"] += weight * np.log(implied_ratio)
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(j + 1, n):
-                a_ij, a_jk, a_ik = A[i, j], A[j, k], A[i, k]
-
-                implied_ik = a_ij * a_jk
-                err_ik = abs(np.log(a_ik) - np.log(implied_ik))
-
-                implied_ij = a_ik / a_jk
-                err_ij = abs(np.log(a_ij) - np.log(implied_ij))
-
-                implied_jk = a_ik / a_ij
-                err_jk = abs(np.log(a_jk) - np.log(implied_jk))
-
-                add_suggestion(i, k, implied_ik, err_ik)
-                add_suggestion(i, j, implied_ij, err_ij)
-                add_suggestion(j, k, implied_jk, err_jk)
-
-    rows = []
-    for (i, k), v in acc.items():
-        if v["w"] <= 0:
-            continue
-        suggested_ratio = float(np.exp(v["logr"] / v["w"]))
-        rows.append({
-            "i": i,
-            "k": k,
-            "Comparación": f"{items[i]} vs {items[k]}",
-            "Severidad": v["w"],
-            "Sugerido_k": ratio_to_slider_nearest(suggested_ratio),
-            "Ratio_sugerido": suggested_ratio
-        })
-
-    rows.sort(key=lambda x: x["Severidad"], reverse=True)
-    return rows[:min(top_n, len(rows))]
-
-
-def top_conflict_explanation(A: np.ndarray, items: list):
-    n = A.shape[0]
-    best = None
-    best_err = -1.0
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            for k in range(j + 1, n):
-                implied_ik = A[i, j] * A[j, k]
-                err = abs(np.log(A[i, k]) - np.log(implied_ik))
-                if err > best_err:
-                    best_err = err
-                    best = (i, j, k)
-
-    if best is None:
-        return None
-
-    i, j, k = best
-    return {
-        "triad": (items[i], items[j], items[k]),
-        "texts": [
-            pref_text(A[i, j], items[i], items[j]),
-            pref_text(A[j, k], items[j], items[k]),
-            pref_text(A[i, k], items[i], items[k]),
-        ],
-        "severity": best_err
-    }
 
 
 # ============================================================
@@ -321,10 +221,7 @@ def send_email(to_email: str, subject: str, body: str, attachment_bytes: bytes, 
 # ESTRUCTURA ENCUESTA
 # ============================================================
 def generate_comparisons(criteria):
-    comps = []
-    for idx, (a, b) in enumerate(combinations(criteria, 2), start=1):
-        comps.append((a, b, f"Q{idx}"))
-    return comps
+    return [(a, b, f"Q{idx}") for idx, (a, b) in enumerate(combinations(criteria, 2), start=1)]
 
 
 COMPARISONS = generate_comparisons(CRITERIA)
@@ -332,7 +229,57 @@ TOTAL_QUESTIONS = len(COMPARISONS)
 
 
 # ============================================================
-# CÁLCULO GLOBAL
+# MÉTRICAS DE IMPACTO DE LA PREGUNTA ACTUAL
+# ============================================================
+def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
+    """
+    Mide cuánto contribuye el par (i,j) a la inconsistencia,
+    promediando el error logarítmico en todas las tríadas que lo contienen.
+    """
+    n = A.shape[0]
+    errs = []
+
+    for k in range(n):
+        if k == pair_i or k == pair_j:
+            continue
+
+        i, j = pair_i, pair_j
+
+        implied_ij = A[i, k] / A[j, k]
+        err = abs(np.log(A[i, j]) - np.log(implied_ij))
+        errs.append(err)
+
+    if not errs:
+        return 0.0
+    return float(np.mean(errs))
+
+
+def pair_cr_without_current(A: np.ndarray, pair_i: int, pair_j: int):
+    """
+    Calcula un CR de referencia quitando el efecto directo del par actual,
+    reemplazándolo por el promedio geométrico implicado por los demás criterios.
+    """
+    n = A.shape[0]
+    implied = []
+
+    for k in range(n):
+        if k == pair_i or k == pair_j:
+            continue
+        implied.append(A[pair_i, k] / A[pair_j, k])
+
+    if not implied:
+        return ahp_cr(A)[2]
+
+    implied_ratio = float(np.exp(np.mean(np.log(implied))))
+    A2 = A.copy()
+    A2[pair_i, pair_j] = implied_ratio
+    A2[pair_j, pair_i] = 1.0 / implied_ratio
+
+    return ahp_cr(A2)[2]
+
+
+# ============================================================
+# RECOLECTAR RESULTADOS
 # ============================================================
 def collect_all_rows_and_results():
     idx_map = {name: i for i, name in enumerate(CRITERIA)}
@@ -382,6 +329,7 @@ def collect_all_rows_and_results():
     M = np.ones((n, n), dtype=float)
     U = np.ones((n, n), dtype=float)
 
+    idx_map = {name: i for i, name in enumerate(CRITERIA)}
     for r in rows:
         i = idx_map[r["Criterion_A"]]
         j = idx_map[r["Criterion_B"]]
@@ -396,6 +344,19 @@ def collect_all_rows_and_results():
 
 
 # ============================================================
+# CALLBACKS DE NAVEGACIÓN
+# ============================================================
+def go_next():
+    if st.session_state.current_question < TOTAL_QUESTIONS:
+        st.session_state.current_question += 1
+
+
+def go_prev():
+    if st.session_state.current_question > 1:
+        st.session_state.current_question -= 1
+
+
+# ============================================================
 # UI
 # ============================================================
 st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
@@ -403,21 +364,21 @@ st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
 if "current_question" not in st.session_state:
     st.session_state.current_question = 1
 
+for _, _, qid in COMPARISONS:
+    if f"k_{qid}" not in st.session_state:
+        st.session_state[f"k_{qid}"] = 5
+    if f"conf_{qid}" not in st.session_state:
+        st.session_state[f"conf_{qid}"] = CONFIDENCE_OPTIONS[0]
+
 st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
-### Descripción de la encuesta
-Esta encuesta busca identificar los criterios técnicos más relevantes para la **selección de medidores para la detección de hidrógeno natural en campo**.
-
-Se utiliza el método **AHP** y su extensión **Fuzzy AHP** para comparar criterios por pares e incorporar la incertidumbre del experto.
-
 ### Instrucciones
 - Cada pantalla muestra **una sola pregunta**.
-- Use la escala de **1 a 9**.
-- **5** significa igualdad de importancia.
-- El indicador de **CR** se actualiza en tiempo real con las respuestas guardadas.
-- **Las respuestas no se corrigen automáticamente**.
+- Las respuestas **no se modifican automáticamente**.
+- La **consistencia global** se calcula en tiempo real.
+- También se muestra cómo la **pregunta actual** influye en la consistencia.
 """)
 
 st.header("Datos del participante")
@@ -432,12 +393,6 @@ if not respondent_name.strip() or not profession.strip():
 if not email_enabled():
     st.warning("⚠️ Correo no configurado. La encuesta funciona, pero no podrá enviar resultados al email.")
 
-for _, _, qid in COMPARISONS:
-    if f"k_{qid}" not in st.session_state:
-        st.session_state[f"k_{qid}"] = 5
-    if f"conf_{qid}" not in st.session_state:
-        st.session_state[f"conf_{qid}"] = CONFIDENCE_OPTIONS[0]
-
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 ok = CR <= CR_THRESHOLD
 
@@ -445,39 +400,29 @@ ok = CR <= CR_THRESHOLD
 # NAVEGACIÓN
 # ============================================================
 st.header("Navegación")
-
 st.progress(st.session_state.current_question / TOTAL_QUESTIONS)
 st.caption(f"Pregunta {st.session_state.current_question} de {TOTAL_QUESTIONS}")
 
-nav_col1, nav_col2 = st.columns([1, 1])
-
-with nav_col1:
-    goto = st.selectbox(
-        "Ir a la pregunta",
-        options=list(range(1, TOTAL_QUESTIONS + 1)),
-        index=st.session_state.current_question - 1,
-        key="goto_question"
-    )
-    if goto != st.session_state.current_question:
-        st.session_state.current_question = goto
-        st.rerun()
-
-with nav_col2:
-    mc1, mc2, mc3 = st.columns(3)
-    mc1.metric("λmax", f"{lam:.4f}")
-    mc2.metric("CI", f"{CI:.4f}")
-    mc3.metric("CR actual", f"{CR:.4f}")
+nav1, nav2, nav3 = st.columns([1, 1, 1])
+with nav1:
+    st.metric("λmax", f"{lam:.4f}")
+with nav2:
+    st.metric("CI", f"{CI:.4f}")
+with nav3:
+    st.metric("CR global", f"{CR:.4f}")
 
 if ok:
-    st.success("✅ Consistencia aceptable.")
+    st.success("✅ Consistencia global aceptable.")
 else:
-    st.error("❌ Consistencia alta. Revise algunas comparaciones.")
+    st.warning("⚠️ La consistencia global aún es alta.")
 
 # ============================================================
 # PREGUNTA ACTUAL
 # ============================================================
 current_idx = st.session_state.current_question - 1
 a, b, qid = COMPARISONS[current_idx]
+i = CRITERIA.index(a)
+j = CRITERIA.index(b)
 
 st.header(f"Pregunta #{st.session_state.current_question}")
 st.subheader(f"{a} vs {b}")
@@ -505,10 +450,10 @@ Marque <b>5</b> si cree que ambos son igualmente necesarios.
 
 st.slider("Escala de preferencia", 1, 9, key=f"k_{qid}")
 
-col1, col2 = st.columns(2)
-with col1:
+c1, c2 = st.columns(2)
+with c1:
     st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
-with col2:
+with c2:
     st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
 st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key=f"conf_{qid}")
@@ -526,15 +471,44 @@ margin-top:10px;">
 """, unsafe_allow_html=True)
 
 # ============================================================
-# BOTONES ANTERIOR / SIGUIENTE
+# IMPACTO DE LA PREGUNTA ACTUAL
+# ============================================================
+st.header("Impacto de esta pregunta en la consistencia")
+
+local_err = pair_local_inconsistency(A_crisp, i, j)
+cr_without_current = pair_cr_without_current(A_crisp, i, j)
+delta_cr = CR - cr_without_current
+
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.metric("CR global actual", f"{CR:.4f}")
+with m2:
+    st.metric("CR si esta pregunta estuviera alineada", f"{cr_without_current:.4f}")
+with m3:
+    st.metric("Impacto estimado de esta pregunta", f"{delta_cr:+.4f}")
+
+if delta_cr > 0:
+    st.info("Esta respuesta parece aumentar la inconsistencia global.")
+elif delta_cr < 0:
+    st.info("Esta respuesta parece ayudar a reducir la inconsistencia global.")
+else:
+    st.info("Esta respuesta tiene un efecto neutro o muy pequeño sobre la inconsistencia global.")
+
+st.caption(f"Error local promedio de esta comparación en sus tríadas: {local_err:.4f}")
+
+# ============================================================
+# BOTONES DE NAVEGACIÓN
 # ============================================================
 st.markdown("### Navegador entre preguntas")
 b1, b2, b3 = st.columns([1, 2, 1])
 
 with b1:
-    if st.button("⬅️ Anterior", disabled=(st.session_state.current_question == 1), use_container_width=True):
-        st.session_state.current_question -= 1
-        st.rerun()
+    st.button(
+        "⬅️ Anterior",
+        on_click=go_prev,
+        disabled=(st.session_state.current_question == 1),
+        use_container_width=True
+    )
 
 with b2:
     st.markdown(
@@ -545,57 +519,12 @@ with b2:
     )
 
 with b3:
-    if st.button("Siguiente ➡️", disabled=(st.session_state.current_question == TOTAL_QUESTIONS), use_container_width=True):
-        st.session_state.current_question += 1
-        st.rerun()
-
-# ============================================================
-# SUGERENCIAS SIN AUTOAJUSTE
-# ============================================================
-st.header("Consistencia en tiempo real")
-
-if not ok:
-    conflict = top_conflict_explanation(A_crisp, CRITERIA)
-    if conflict:
-        st.markdown("### ¿Qué está pasando?")
-        st.markdown(
-            f"- {conflict['texts'][0]}\n"
-            f"- {conflict['texts'][1]}\n"
-            f"- pero también {conflict['texts'][2]}"
-        )
-
-    st.markdown("### Comparaciones sugeridas para revisar")
-    st.caption("Estas sugerencias son solo orientativas. El sistema no cambia ninguna respuesta automáticamente.")
-
-    sugg = top_pair_suggestions(A_crisp, CRITERIA, top_n=3)
-
-    for opt_i, s in enumerate(sugg, start=1):
-        left = CRITERIA[s["i"]]
-        right = CRITERIA[s["k"]]
-        k_sug = int(s["Sugerido_k"])
-
-        st.markdown(f"""
-        <div style="
-        background-color:#111827;
-        border:1px solid #334155;
-        border-left:8px solid #f59e0b;
-        padding:16px;
-        border-radius:14px;
-        margin:12px 0;">
-        <div style="font-size:18px; font-weight:800;">Sugerencia {opt_i}</div>
-        <div style="margin-top:10px; font-size:16px; line-height:1.55;">
-        <b>Revisar:</b> {left} vs {right}<br>
-        <b>Valor orientativo:</b> mover hacia {k_sug}
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button(f"Ir a revisar esa pregunta {opt_i}", key=f"go_{opt_i}"):
-            for pos, (ca, cb, cqid) in enumerate(COMPARISONS, start=1):
-                if (ca == left and cb == right) or (ca == right and cb == left):
-                    st.session_state.current_question = pos
-                    break
-            st.rerun()
+    st.button(
+        "Siguiente ➡️",
+        on_click=go_next,
+        disabled=(st.session_state.current_question == TOTAL_QUESTIONS),
+        use_container_width=True
+    )
 
 # ============================================================
 # RESUMEN DE PESOS
@@ -615,12 +544,12 @@ df_fuzzy_weights = pd.DataFrame({
     "Peso_fuzzy_defuzz": w_fuzzy_def
 }).sort_values("Peso_fuzzy_defuzz", ascending=False)
 
-col_a, col_b = st.columns(2)
-with col_a:
+p1, p2 = st.columns(2)
+with p1:
     st.subheader("Pesos crisp")
     st.dataframe(df_crisp_weights, use_container_width=True)
 
-with col_b:
+with p2:
     st.subheader("Pesos fuzzy")
     st.dataframe(df_fuzzy_weights[["Criterio", "Peso_fuzzy_defuzz"]], use_container_width=True)
 
