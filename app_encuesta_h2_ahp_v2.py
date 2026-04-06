@@ -293,6 +293,7 @@ def move_rank_item_down(index: int):
 
 
 def request_question_load(step: int):
+    step = max(0, min(int(step), TOTAL_QUESTIONS))
     st.session_state.current_step = step
     st.session_state["pending_question_load"] = True
 
@@ -324,7 +325,7 @@ def go_prev():
 def go_to_question(question_number: int):
     if st.session_state.current_step > 0:
         save_current_question_from_ui()
-    request_question_load(int(question_number))
+    request_question_load(question_number)
 
 
 # ============================================================
@@ -522,11 +523,8 @@ if (
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 ok = CR <= CR_THRESHOLD
 
-# ============================================================
-# PANEL SUPERIOR
-# ============================================================
-step_num = st.session_state.current_step + 1
 st.header("Progreso")
+step_num = st.session_state.current_step + 1
 st.progress(step_num / TOTAL_STEPS)
 st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
@@ -544,7 +542,7 @@ else:
     st.warning("⚠️ La consistencia global aún es alta.")
 
 # ============================================================
-# PASO 0: RANKING INICIAL
+# PASO 0
 # ============================================================
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
@@ -588,17 +586,17 @@ if st.session_state.current_step == 0:
             )
 
     st.markdown("### Navegación")
-    _, cnav, rnav = st.columns([1, 2, 1])
-    with cnav:
+    _, center_col, right_col = st.columns([1, 2, 1])
+    with center_col:
         st.markdown(
             "<div style='text-align:center; padding-top:8px; font-weight:700;'>Orden inicial de criterios</div>",
             unsafe_allow_html=True
         )
-    with rnav:
+    with right_col:
         st.button("Siguiente ➡️", key="next_from_ranking", on_click=go_next, use_container_width=True)
 
 # ============================================================
-# PASOS DE PREGUNTAS
+# PREGUNTAS
 # ============================================================
 else:
     current_idx = st.session_state.current_step - 1
@@ -649,42 +647,48 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("### Navegador entre preguntas")
+    st.markdown("### Navegador entre preguntas")
 
-row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
-with row1_col1:
-    st.button("⬅️ Anterior", key="nav_prev_main", on_click=go_prev, use_container_width=True)
+    row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
+    with row1_col1:
+        st.button("⬅️ Anterior", key="nav_prev_main", on_click=go_prev, use_container_width=True)
 
-with row1_col2:
-    st.markdown(
-        f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
-        f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
-        f"</div>",
-        unsafe_allow_html=True
-    )
+    with row1_col2:
+        st.markdown(
+            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
+            f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
 
-with row1_col3:
-    st.button(
-        "Siguiente ➡️",
-        key="nav_next_main",
-        on_click=go_next,
-        disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
-        use_container_width=True
-    )
+    with row1_col3:
+        st.button(
+            "Siguiente ➡️",
+            key="nav_next_main",
+            on_click=go_next,
+            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
+            use_container_width=True
+        )
 
-row2_col1, row2_col2 = st.columns([1, 1])
-with row2_col1:
-    st.selectbox(
-        "Pregunta rápida",
-        options=list(range(1, TOTAL_QUESTIONS + 1)),
-        index=st.session_state.current_step - 1,
-        key="quick_question_selector"
-    )
+    quick_options = list(range(1, TOTAL_QUESTIONS + 1))
+    quick_current = st.session_state.current_step
+    if quick_current not in quick_options:
+        quick_current = 1
 
-with row2_col2:
-    if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
-        go_to_question(int(st.session_state["quick_question_selector"]))
-    
+    row2_col1, row2_col2 = st.columns([1, 1])
+    with row2_col1:
+        st.selectbox(
+            "Pregunta rápida",
+            options=quick_options,
+            index=quick_options.index(quick_current),
+            key="quick_question_selector",
+            format_func=lambda x: f"Pregunta {x}"
+        )
+
+    with row2_col2:
+        if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
+            go_to_question(int(st.session_state["quick_question_selector"]))
+
     st.header("Organización de preferencias")
 
     initial_rank = get_initial_ranking()
@@ -725,9 +729,6 @@ with row2_col2:
         if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_pair_{p['Pregunta']}", use_container_width=True):
             go_to_question(int(p["Pregunta"]))
 
-# ============================================================
-# FINALIZAR
-# ============================================================
 st.header("Finalizar")
 
 if not ok:
