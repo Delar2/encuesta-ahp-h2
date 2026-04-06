@@ -692,9 +692,6 @@ else:
         for i_rank, c in enumerate(ahp_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
-    st.subheader("Comparación entre orden inicial y orden AHP")
-    st.dataframe(ranking_comparison_df(initial_rank, ahp_rank), use_container_width=True)
-
     st.header("Consistencia global")
 
     m1, m2, m3 = st.columns(3)
