@@ -509,7 +509,7 @@ if st.session_state.current_step == 0:
     st.markdown("### Contexto de los criterios")
 
     st.image(
-        "imagen_2026-04-08_141401114.png",
+        "imagen_2026-04-08_142656956.png",
         use_container_width=True
     )
     
