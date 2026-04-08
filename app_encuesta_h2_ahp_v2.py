@@ -24,22 +24,21 @@ CONFIDENCE_DELTAS = {
 CONFIDENCE_OPTIONS = list(CONFIDENCE_DELTAS.keys())
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 
+# ============================================================
+# CRITERIOS ACTUALIZADOS
+# ============================================================
 CRITERIA = [
     "Costo",
     "Rango de detección de H₂",
-    "Sensibilidad en la detección de H₂",
     "Detección multigas",
-    "Portabilidad y autonomía energética",
-    "Robustez operativa"
+    "Portabilidad y autonomía energética"
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo y sus accesorios",
-    "Rango de detección de H₂": "el intervalo de medición del hidrógeno natural (por ejemplo: ppm o %vol), desde el valor mínimo hasta el máximo",
-    "Sensibilidad en la detección de H₂": "la capacidad de detectar bajas concentraciones de hidrógeno natural (ppm o ppb) y pequeñas variaciones en la señal",
-    "Detección multigas": "la capacidad de medir simultáneamente otros gases como CH₄ y N₂",
-    "Portabilidad y autonomía energética": "el peso del equipo, la facilidad de transporte y la duración de la batería",
-    "Robustez operativa": "la capacidad del equipo para funcionar en condiciones de campo, como temperatura y humedad"
+    "Costo": "el precio de adquisición del equipo, sus accesorios y los costos de implementación",
+    "Rango de detección de H₂": "el intervalo de concentración de hidrógeno que el equipo puede medir, desde valores bajos hasta altos",
+    "Detección multigas": "la capacidad del equipo para medir otros gases además del hidrógeno, como CH₄ y N₂",
+    "Portabilidad y autonomía energética": "la batería, fuente de alimentación, duración de carga, peso y dimensiones del equipo"
 }
 
 
@@ -398,30 +397,6 @@ def current_ahp_ranking(w_crisp):
     return [c for c, _ in ranking]
 
 
-def ranking_comparison_df(initial_rank, ahp_rank):
-    initial_pos = {c: i + 1 for i, c in enumerate(initial_rank)}
-    ahp_pos = {c: i + 1 for i, c in enumerate(ahp_rank)}
-
-    rows = []
-    for c in CRITERIA:
-        delta = initial_pos[c] - ahp_pos[c]
-        if delta > 0:
-            movement = f"↑ {delta}"
-        elif delta < 0:
-            movement = f"↓ {abs(delta)}"
-        else:
-            movement = "—"
-
-        rows.append({
-            "Criterio": c,
-            "Orden inicial": initial_pos[c],
-            "Orden AHP actual": ahp_pos[c],
-            "Cambio": movement
-        })
-
-    return pd.DataFrame(rows).sort_values("Orden AHP actual")
-
-
 def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
     n = A.shape[0]
     errs = []
@@ -528,22 +503,10 @@ step_num = st.session_state.current_step + 1
 st.progress(step_num / TOTAL_STEPS)
 st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
-# ============================================================
-# PASO 0
-# ============================================================
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
-    
-    st.image(
-    "imagen_2026-04-06_170743831.png",
-    caption="Criterios técnicos para la selección de medidores de hidrógeno",
-    use_container_width=True
-    )
-    
-    
     st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
 
-    
     ranking = get_initial_ranking()
 
     for idx, item in enumerate(ranking):
@@ -563,23 +526,9 @@ if st.session_state.current_step == 0:
                 unsafe_allow_html=True
             )
         with c2:
-            st.button(
-                "↑",
-                key=f"rank_up_{idx}",
-                on_click=move_rank_item_up,
-                args=(idx,),
-                disabled=(idx == 0),
-                use_container_width=True
-            )
+            st.button("↑", key=f"rank_up_{idx}", on_click=move_rank_item_up, args=(idx,), disabled=(idx == 0), use_container_width=True)
         with c3:
-            st.button(
-                "↓",
-                key=f"rank_down_{idx}",
-                on_click=move_rank_item_down,
-                args=(idx,),
-                disabled=(idx == len(ranking) - 1),
-                use_container_width=True
-            )
+            st.button("↓", key=f"rank_down_{idx}", on_click=move_rank_item_down, args=(idx,), disabled=(idx == len(ranking) - 1), use_container_width=True)
 
     st.markdown("### Navegación")
     _, center_col, right_col = st.columns([1, 2, 1])
@@ -591,9 +540,6 @@ if st.session_state.current_step == 0:
     with right_col:
         st.button("Siguiente ➡️", key="next_from_ranking", on_click=go_next, use_container_width=True)
 
-# ============================================================
-# PREGUNTAS
-# ============================================================
 else:
     current_idx = st.session_state.current_step - 1
     a, b, qid = COMPARISONS[current_idx]
@@ -692,7 +638,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial")
+        st.subheader("Orden inicial del encuestado")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
@@ -770,8 +716,6 @@ else:
                 "Criterio": ahp_rank
             })
 
-            df_rank_compare = ranking_comparison_df(initial_rank, ahp_rank)
-
             df_participant = pd.DataFrame([{
                 "Respondent_Name": respondent_name.strip(),
                 "Profession": profession.strip(),
@@ -815,7 +759,6 @@ else:
                 df_participant.to_excel(writer, index=False, sheet_name="Participante")
                 df_initial_rank.to_excel(writer, index=False, sheet_name="Orden_Inicial")
                 df_current_rank.to_excel(writer, index=False, sheet_name="Orden_AHP")
-                df_rank_compare.to_excel(writer, index=False, sheet_name="Comparacion_Ordenes")
                 df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
                 df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
                 df_pairs.to_excel(writer, index=False, sheet_name="Pares_Sensibles")
