@@ -505,6 +505,14 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
+    
+    st.markdown("### Contexto de los criterios")
+
+    st.image(
+        "imagen_2026-04-08_141401114.png",
+        use_container_width=True
+    )
+    
     st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
