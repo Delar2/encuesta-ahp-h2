@@ -638,7 +638,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial del encuestado")
+        st.subheader("Orden inicial")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
