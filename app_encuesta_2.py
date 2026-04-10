@@ -37,7 +37,7 @@ CRITERIA = [
 
 DEFINICIONES = {
     "Muestreo puntual": "toma de datos en un solo momento y lugar específico, sin seguimiento temporal continuo",
-    "Medición a diferentes profundidades": "evaluación de la variable de interés en distintos niveles de profundidad para identificar variaciones verticales",
+    "Medición a diferentes profundidades": "medición de concetración de gases a distintos niveles de profundidad",
     "Medición continua por 24 horas": "registro continuo durante un día completo para capturar variaciones diurnas o cambios de corto plazo",
     "Medición continua por 7 días": "registro continuo durante una semana completa para analizar patrones temporales más estables y variaciones prolongadas"
 }
