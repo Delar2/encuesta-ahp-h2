@@ -448,7 +448,7 @@ st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de diferentes **alternativas de muestreo** dentro de la estructura de decisión.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de diferentes **alternativas de muestreo** en la detección de hidrógeno natural en campo.
 
 ### Enfoque metodológico
 
