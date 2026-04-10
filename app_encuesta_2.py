@@ -495,6 +495,11 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de alternativas")
+    st.image(
+        "imagen_2026-04-10_142458512.png",
+        caption="Criterios técnicos para la selección de medidores de hidrógeno",
+        use_container_width=True
+    )
     st.markdown("Use los botones para mover las alternativas. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
@@ -630,7 +635,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial del encuestado")
+        st.subheader("Orden inicial")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
