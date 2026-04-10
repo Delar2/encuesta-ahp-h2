@@ -16,10 +16,11 @@ RI_TABLE = {
     6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45, 10: 1.49
 }
 
+# Ajustados para escala -9..9
 CONFIDENCE_DELTAS = {
-    "Muy seguro": 0.5,
-    "Moderadamente seguro": 1.0,
-    "Poco seguro": 2.0
+    "Muy seguro": 1.0,
+    "Moderadamente seguro": 2.0,
+    "Poco seguro": 4.0
 }
 CONFIDENCE_OPTIONS = list(CONFIDENCE_DELTAS.keys())
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
@@ -45,12 +46,13 @@ DEFINICIONES = {
 # ============================================================
 # TEXTO
 # ============================================================
-def interpret_pair(k: int, a: str, b: str) -> str:
+def interpret_pair(score: int, a: str, b: str) -> str:
     a_fmt = f"<b><u>{a}</u></b>"
     b_fmt = f"<b><u>{b}</u></b>"
-    if k == 5:
+
+    if score == 0:
         return f"{a_fmt} y {b_fmt} tienen importancia similar."
-    elif k < 5:
+    elif score < 0:
         return f"{a_fmt} es más importante que {b_fmt}."
     return f"{b_fmt} es más importante que {a_fmt}."
 
@@ -62,31 +64,19 @@ def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
 
-def slider_to_ratio_int(k: int) -> float:
-    mapping_left = {1: 9, 2: 7, 3: 5, 4: 3, 5: 1}
-    if k <= 5:
-        return float(mapping_left[k])
-    inv = mapping_left[10 - k]
-    return 1.0 / float(inv)
+def score_to_ratio(score: float) -> float:
+    """
+    Convierte score en [-9, 9] a ratio A/B.
+    -9 => 9
+     0 => 1
+     9 => 1/9
+    """
+    score = clamp(float(score), -9.0, 9.0)
+    return float(9 ** (-score / 9.0))
 
 
-ANCHOR_R = np.array([9, 7, 5, 3, 1, 1/3, 1/5, 1/7, 1/9], dtype=float)
-
-
-def ratio_from_k(k: float) -> float:
-    k = clamp(float(k), 1.0, 9.0)
-    if float(int(k)) == k:
-        return float(ANCHOR_R[int(k) - 1])
-
-    i = int(np.floor(k))
-    j = int(np.ceil(k))
-    if i == j:
-        return float(ANCHOR_R[i - 1])
-
-    ri = ANCHOR_R[i - 1]
-    rj = ANCHOR_R[j - 1]
-    t = (k - i) / (j - i)
-    return float(np.exp((1 - t) * np.log(ri) + t * np.log(rj)))
+def ratio_from_score(score: float) -> float:
+    return score_to_ratio(score)
 
 
 def build_matrix(n: int, answers: dict) -> np.ndarray:
@@ -235,8 +225,8 @@ def ensure_answer_state():
         st.session_state.current_step = 0
 
     for _, _, qid in COMPARISONS:
-        if f"answer_k_{qid}" not in st.session_state:
-            st.session_state[f"answer_k_{qid}"] = 5
+        if f"answer_score_{qid}" not in st.session_state:
+            st.session_state[f"answer_score_{qid}"] = 0
         if f"answer_conf_{qid}" not in st.session_state:
             st.session_state[f"answer_conf_{qid}"] = CONFIDENCE_OPTIONS[0]
 
@@ -257,7 +247,7 @@ def load_current_question_into_ui(force: bool = False):
     _, _, qid = COMPARISONS[st.session_state.current_step - 1]
 
     if force or st.session_state.get("ui_loaded_qid") != qid:
-        st.session_state["ui_k"] = st.session_state[f"answer_k_{qid}"]
+        st.session_state["ui_score"] = st.session_state[f"answer_score_{qid}"]
         st.session_state["ui_conf"] = st.session_state[f"answer_conf_{qid}"]
         st.session_state["ui_loaded_qid"] = qid
 
@@ -265,11 +255,11 @@ def load_current_question_into_ui(force: bool = False):
 def save_current_question_from_ui():
     if st.session_state.current_step == 0:
         return
-    if "ui_k" not in st.session_state or "ui_conf" not in st.session_state:
+    if "ui_score" not in st.session_state or "ui_conf" not in st.session_state:
         return
 
     _, _, qid = COMPARISONS[st.session_state.current_step - 1]
-    st.session_state[f"answer_k_{qid}"] = int(st.session_state["ui_k"])
+    st.session_state[f"answer_score_{qid}"] = int(st.session_state["ui_score"])
     st.session_state[f"answer_conf_{qid}"] = st.session_state["ui_conf"]
 
 
@@ -336,33 +326,33 @@ def collect_all_rows_and_results():
     rows = []
 
     for q_num, (a, b, qid) in enumerate(COMPARISONS, start=1):
-        k = int(st.session_state[f"answer_k_{qid}"])
+        score = int(st.session_state[f"answer_score_{qid}"])
         conf = st.session_state[f"answer_conf_{qid}"]
 
-        r_crisp = slider_to_ratio_int(k)
+        r_crisp = score_to_ratio(score)
         i, j = idx_map[a], idx_map[b]
         crisp_answers[(i, j)] = r_crisp
 
         d = CONFIDENCE_DELTAS[conf]
-        k_l = clamp(k - d, 1.0, 9.0)
-        k_m = float(k)
-        k_u = clamp(k + d, 1.0, 9.0)
+        score_l = clamp(score - d, -9.0, 9.0)
+        score_m = float(score)
+        score_u = clamp(score + d, -9.0, 9.0)
 
-        r_l = ratio_from_k(k_u)
-        r_m = ratio_from_k(k_m)
-        r_u = ratio_from_k(k_l)
+        r_l = ratio_from_score(score_u)
+        r_m = ratio_from_score(score_m)
+        r_u = ratio_from_score(score_l)
 
         rows.append({
             "Question_Number": q_num,
             "Question_ID": qid,
             "Criterion_A": a,
             "Criterion_B": b,
-            "k": k,
+            "score": score,
             "Confidence": conf,
             "Delta": float(d),
-            "TFN_k_l": float(k_l),
-            "TFN_k_m": float(k_m),
-            "TFN_k_u": float(k_u),
+            "TFN_score_l": float(score_l),
+            "TFN_score_m": float(score_m),
+            "TFN_score_u": float(score_u),
             "Ratio_crisp_for_CR": float(r_crisp),
             "TFN_ratio_l": float(r_l),
             "TFN_ratio_m": float(r_m),
@@ -445,7 +435,7 @@ ensure_answer_state()
 
 if st.session_state.current_step > 0:
     if (
-        "ui_k" not in st.session_state
+        "ui_score" not in st.session_state
         or "ui_conf" not in st.session_state
         or st.session_state.get("pending_question_load", False)
     ):
@@ -489,7 +479,7 @@ if not email_enabled():
 
 if (
     st.session_state.current_step > 0
-    and "ui_k" in st.session_state
+    and "ui_score" in st.session_state
     and "ui_conf" in st.session_state
     and not st.session_state.get("pending_question_load", False)
 ):
@@ -505,14 +495,6 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
-    
-    st.markdown("### Contexto de los criterios")
-
-    st.image(
-        "imagen_2026-04-08_142656956.png",
-        use_container_width=True
-    )
-    
     st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
@@ -571,18 +553,20 @@ else:
     <br><br>
     Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
     <br>
-    Marque <b>5</b> si cree que ambos son igualmente necesarios.
+    Marque <b>0</b> si cree que ambos son igualmente necesarios.
 
     </div>
     """, unsafe_allow_html=True)
 
-    st.slider("Escala de preferencia", 1, 9, key="ui_k")
+    st.slider("Escala de preferencia", -9, 9, 0, 1, key="ui_score")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
-        st.markdown(f"<div style='text-align:left; font-size:20px'><b>1 → {a}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:left; font-size:20px'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; font-size:20px'><b>0 = iguales</b></div>", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← +9</b></div>", unsafe_allow_html=True)
 
     st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
@@ -593,7 +577,7 @@ else:
     padding:14px;
     border-radius:10px;
     margin-top:10px;">
-    <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_k']), a, b)}
+    <b>Interpretación actual:</b> {interpret_pair(int(st.session_state['ui_score']), a, b)}
     </div>
     """, unsafe_allow_html=True)
 
@@ -646,7 +630,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial")
+        st.subheader("Orden inicial del encuestado")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
@@ -697,7 +681,7 @@ if not ok:
     st.error("❌ No puede finalizar mientras el CR sea mayor a 0.10.")
 else:
     if st.button("Enviar respuestas", key="send_responses_button"):
-        if st.session_state.current_step > 0 and "ui_k" in st.session_state and "ui_conf" in st.session_state:
+        if st.session_state.current_step > 0 and "ui_score" in st.session_state and "ui_conf" in st.session_state:
             save_current_question_from_ui()
             rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 
