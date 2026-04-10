@@ -496,7 +496,7 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de alternativas")
     st.image(
-        "imagen_2026-04-10_142458512.png",
+        "imagen_2026-04-10_142741490.png",
         caption="Criterios técnicos para la selección de medidores de hidrógeno",
         use_container_width=True
     )
