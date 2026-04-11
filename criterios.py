@@ -16,7 +16,6 @@ RI_TABLE = {
     6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45, 10: 1.49
 }
 
-# Ajustados para escala -9..9
 CONFIDENCE_DELTAS = {
     "Muy seguro": 1.0,
     "Moderadamente seguro": 2.0,
@@ -29,17 +28,15 @@ ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 # CRITERIOS ACTUALIZADOS
 # ============================================================
 CRITERIA = [
-    "Costo",
-    "Rango de detección de H₂",
-    "Detección multigas",
-    "Portabilidad y autonomía energética"
+    "Muestreo",
+    "Analítica",
+    "Sensores"
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo, sus accesorios y los costos de implementación",
-    "Rango de detección de H₂": "el intervalo de concentración de hidrógeno que el equipo puede medir, desde valores bajos hasta altos",
-    "Detección multigas": "la capacidad del equipo para medir otros gases además del hidrógeno, como CH₄ y N₂",
-    "Portabilidad y autonomía energética": "la batería, fuente de alimentación, duración de carga, peso y dimensiones del equipo"
+    "Muestreo": "conjunto de estrategias y procedimientos para recolectar muestras o mediciones representativas en campo",
+    "Analítica": "conjunto de técnicas de laboratorio o caracterización empleadas para analizar e interpretar las muestras recolectadas",
+    "Sensores": "equipos o dispositivos de medición utilizados para detectar, registrar o monitorear variables relevantes en campo"
 }
 
 
@@ -429,7 +426,7 @@ def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
 # ============================================================
 # UI
 # ============================================================
-st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
+st.set_page_config(page_title="Encuesta AHP Estrategia", layout="centered")
 
 ensure_answer_state()
 
@@ -442,27 +439,27 @@ if st.session_state.current_step > 0:
         load_current_question_into_ui(force=True)
         st.session_state["pending_question_load"] = False
 
-st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
+st.title("Encuesta AHP — Evaluación de criterios estratégicos")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, cuáles son los criterios técnicos más relevantes para definir la **selección de medidores para la detección de hidrógeno natural en campo**.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de los criterios estratégicos para definir el valor técnico de la estrategia de caracterización de filtraciones superficiales de H₂ en “círculos de hadas”.
 
 ### Enfoque metodológico
 
-Para establecer la importancia relativa de los criterios se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar diferentes criterios de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
+Para establecer la importancia relativa de los criterios se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar criterios de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
 
-Los pesos obtenidos mediante AHP representarán las prioridades técnicas del estudio.
+Los pesos obtenidos mediante AHP representarán las prioridades del estudio.
 
-Posteriormente, estos pesos serán ingresados en un modelo matemático de optimización cuyo objetivo será seleccionar la mejor combinación de equipos, considerando tanto el desempeño técnico como las restricciones económicas del proyecto.
+Posteriormente, estos pesos podrán ser utilizados en un modelo de análisis o decisión para apoyar la selección o priorización de componentes dentro de la estrategia general.
 
 ### Consideraciones importantes
 
 - No existe una respuesta correcta o incorrecta.
 - Las comparaciones deben realizarse siempre pensando en:  
-  **¿Qué criterio es más importante para garantizar la calidad técnica en la caracterización de filtraciones de hidrógeno?**
+  **¿Qué criterio es más importante para definir el valor técnico de la estrategia de caracterización?**
 """)
 
 st.header("Datos del participante")
@@ -495,11 +492,6 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de criterios")
-    st.image(
-        "imagen_2026-04-08_142656956.png",
-        caption="Criterios técnicos para la selección de medidores de hidrógeno",
-        use_container_width=True
-    )
     st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
@@ -635,7 +627,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial del encuestado")
+        st.subheader("Orden inicial")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
@@ -767,10 +759,10 @@ else:
                 df_U.to_excel(writer, sheet_name="Fuzzy_U")
 
             excel_bytes = bio.getvalue()
-            filename = f"AHP_Fuzzy_Medidores_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            filename = f"AHP_Fuzzy_Estrategia_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
             admin = SECRETS["ADMIN_EMAIL"]
-            subject = f"Respuesta AHP/Fuzzy Medidores H2: {respondent_name.strip()}"
+            subject = f"Respuesta AHP/Fuzzy Estrategia H2: {respondent_name.strip()}"
             body = (
                 f"Se recibió una nueva respuesta.\n\n"
                 f"Participante: {respondent_name.strip()}\n"
