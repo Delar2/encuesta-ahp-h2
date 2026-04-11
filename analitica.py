@@ -29,17 +29,21 @@ ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 # CRITERIOS ACTUALIZADOS
 # ============================================================
 CRITERIA = [
-    "Costo",
-    "Rango de detección de H₂",
-    "Detección multigas",
-    "Portabilidad y autonomía energética"
+    "Caracterización isotópica de Deuterio",
+    "Caracterización isotópica de Helio",
+    "Cromatografía de gases",
+    "Caracterización Mineralógica",
+    "Análisis Biogeoquímico",
+    "Análisis fisicoquímicos"
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo, sus accesorios y los costos de implementación",
-    "Rango de detección de H₂": "el intervalo de concentración de hidrógeno que el equipo puede medir, desde valores bajos hasta altos",
-    "Detección multigas": "la capacidad del equipo para medir otros gases además del hidrógeno, como CH₄ y N₂",
-    "Portabilidad y autonomía energética": "la batería, fuente de alimentación, duración de carga, peso y dimensiones del equipo"
+    "Caracterización isotópica de Deuterio": "análisis isotópico del deuterio para apoyar la identificación del origen, comportamiento y trazabilidad de los fluidos o gases presentes",
+    "Caracterización isotópica de Helio": "análisis isotópico del helio para aportar información sobre procedencia, migración y posibles fuentes geológicas profundas",
+    "Cromatografía de gases": "técnica analítica para separar, identificar y cuantificar gases o compuestos volátiles presentes en la muestra",
+    "Caracterización Mineralógica": "análisis de la composición y características mineralógicas del material para entender procesos geológicos y de interacción fluido-roca",
+    "Análisis Biogeoquímico": "evaluación de procesos biológicos, geoquímicos y sus interacciones para interpretar transformaciones del sistema natural",
+    "Análisis fisicoquímicos": "medición de parámetros físicos y químicos de la muestra, como pH, conductividad, temperatura, alcalinidad u otras propiedades relevantes"
 }
 
 
@@ -429,7 +433,7 @@ def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
 # ============================================================
 # UI
 # ============================================================
-st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
+st.set_page_config(page_title="Encuesta AHP Analítica", layout="centered")
 
 ensure_answer_state()
 
@@ -442,27 +446,27 @@ if st.session_state.current_step > 0:
         load_current_question_into_ui(force=True)
         st.session_state["pending_question_load"] = False
 
-st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
+st.title("Encuesta AHP — Evaluación de alternativas analíticas")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, cuáles son los criterios técnicos más relevantes para definir la **selección de medidores para la detección de hidrógeno natural en campo**.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de diferentes **alternativas analíticas** dentro de la estructura de decisión.
 
 ### Enfoque metodológico
 
-Para establecer la importancia relativa de los criterios se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar diferentes criterios de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
+Para establecer la importancia relativa de las alternativas se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar diferentes opciones de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
 
-Los pesos obtenidos mediante AHP representarán las prioridades técnicas del estudio.
+Los pesos obtenidos mediante AHP representarán las prioridades del estudio.
 
-Posteriormente, estos pesos serán ingresados en un modelo matemático de optimización cuyo objetivo será seleccionar la mejor combinación de equipos, considerando tanto el desempeño técnico como las restricciones económicas del proyecto.
+Posteriormente, estos pesos podrán ser utilizados en un modelo de análisis o decisión para identificar cuáles alternativas analíticas resultan más relevantes según el juicio experto de los participantes.
 
 ### Consideraciones importantes
 
 - No existe una respuesta correcta o incorrecta.
 - Las comparaciones deben realizarse siempre pensando en:  
-  **¿Qué criterio es más importante para garantizar la calidad técnica en la caracterización de filtraciones de hidrógeno?**
+  **¿Qué alternativa analítica es más importante o más adecuada dentro del proceso de evaluación?**
 """)
 
 st.header("Datos del participante")
@@ -494,13 +498,8 @@ st.progress(step_num / TOTAL_STEPS)
 st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
-    st.header("Paso 1 — Orden inicial de criterios")
-    st.image(
-        "imagen_2026-04-08_142656956.png",
-        caption="Criterios técnicos para la selección de medidores de hidrógeno",
-        use_container_width=True
-    )
-    st.markdown("Use los botones para mover los criterios. **Arriba = más importante**, **abajo = menos importante**.")
+    st.header("Paso 1 — Orden inicial de alternativas")
+    st.markdown("Use los botones para mover las alternativas. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
 
@@ -529,7 +528,7 @@ if st.session_state.current_step == 0:
     _, center_col, right_col = st.columns([1, 2, 1])
     with center_col:
         st.markdown(
-            "<div style='text-align:center; padding-top:8px; font-weight:700;'>Orden inicial de criterios</div>",
+            "<div style='text-align:center; padding-top:8px; font-weight:700;'>Orden inicial de alternativas</div>",
             unsafe_allow_html=True
         )
     with right_col:
@@ -556,9 +555,9 @@ else:
 
     Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
     <br><br>
-    Utilice la escala lineal para desplazar el marcador hacia el criterio que considere predominante.
+    Utilice la escala lineal para desplazar el marcador hacia la alternativa que considere predominante.
     <br>
-    Marque <b>0</b> si cree que ambos son igualmente necesarios.
+    Marque <b>0</b> si cree que ambas son igualmente necesarias.
 
     </div>
     """, unsafe_allow_html=True)
@@ -767,10 +766,10 @@ else:
                 df_U.to_excel(writer, sheet_name="Fuzzy_U")
 
             excel_bytes = bio.getvalue()
-            filename = f"AHP_Fuzzy_Medidores_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            filename = f"AHP_Fuzzy_Analitica_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
             admin = SECRETS["ADMIN_EMAIL"]
-            subject = f"Respuesta AHP/Fuzzy Medidores H2: {respondent_name.strip()}"
+            subject = f"Respuesta AHP/Fuzzy Analítica: {respondent_name.strip()}"
             body = (
                 f"Se recibió una nueva respuesta.\n\n"
                 f"Participante: {respondent_name.strip()}\n"
