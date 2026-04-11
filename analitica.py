@@ -452,7 +452,7 @@ st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de diferentes **alternativas analíticas** dentro de la estructura de decisión.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de diferentes **tecnicas analíticas** en la detección de hidrógeno natural en muestras provinientes del trabajo en campo.
 
 ### Enfoque metodológico
 
