@@ -29,14 +29,12 @@ ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 # ============================================================
 CRITERIA = [
     "Muestreo",
-    "Analítica",
-    "Sensores"
+    "Analítica"
 ]
 
 DEFINICIONES = {
     "Muestreo": "conjunto de estrategias y procedimientos para recolectar muestras o mediciones representativas en campo",
-    "Analítica": "conjunto de técnicas de laboratorio o caracterización empleadas para analizar e interpretar las muestras recolectadas",
-    "Sensores": "equipos o dispositivos de medición utilizados para detectar, registrar o monitorear variables relevantes en campo"
+    "Analítica": "conjunto de técnicas de laboratorio o caracterización empleadas para analizar e interpretar las muestras recolectadas"
 }
 
 
@@ -439,26 +437,22 @@ if st.session_state.current_step > 0:
         load_current_question_into_ui(force=True)
         st.session_state["pending_question_load"] = False
 
-st.title("Encuesta AHP — Evaluación de criterios estratégicos")
+st.title("Encuesta AHP — Comparación entre Muestreo y Analítica")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa de los criterios estratégicos para definir el valor técnico de la estrategia de caracterización de filtraciones superficiales de H₂ en “círculos de hadas”.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa entre los criterios **Muestreo** y **Analítica** para definir el valor técnico de la estrategia de caracterización de filtraciones superficiales de H₂ en “círculos de hadas”.
 
 ### Enfoque metodológico
 
-Para establecer la importancia relativa de los criterios se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar criterios de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
-
-Los pesos obtenidos mediante AHP representarán las prioridades del estudio.
-
-Posteriormente, estos pesos podrán ser utilizados en un modelo de análisis o decisión para apoyar la selección o priorización de componentes dentro de la estrategia general.
+Se utilizará el método **AHP (Analytic Hierarchy Process)** para comparar ambos criterios de forma pareada y obtener su peso relativo dentro de la estructura de decisión.
 
 ### Consideraciones importantes
 
 - No existe una respuesta correcta o incorrecta.
-- Las comparaciones deben realizarse siempre pensando en:  
+- La comparación debe realizarse pensando en:  
   **¿Qué criterio es más importante para definir el valor técnico de la estrategia de caracterización?**
 """)
 
@@ -483,7 +477,7 @@ if (
     save_current_question_from_ui()
 
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
-ok = CR <= CR_THRESHOLD
+ok = True
 
 st.header("Progreso")
 step_num = st.session_state.current_step + 1
@@ -601,25 +595,6 @@ else:
             use_container_width=True
         )
 
-    quick_options = list(range(1, TOTAL_QUESTIONS + 1))
-    quick_current = st.session_state.current_step
-    if quick_current not in quick_options:
-        quick_current = 1
-
-    row2_col1, row2_col2 = st.columns([1, 1])
-    with row2_col1:
-        st.selectbox(
-            "Pregunta rápida",
-            options=quick_options,
-            index=quick_options.index(quick_current),
-            key="quick_question_selector",
-            format_func=lambda x: f"Pregunta {x}"
-        )
-
-    with row2_col2:
-        if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
-            go_to_question(int(st.session_state["quick_question_selector"]))
-
     st.header("Organización de preferencias")
 
     initial_rank = get_initial_ranking()
@@ -627,7 +602,7 @@ else:
 
     rc1, rc2 = st.columns(2)
     with rc1:
-        st.subheader("Orden inicial")
+        st.subheader("Orden inicial del encuestado")
         for i_rank, c in enumerate(initial_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
@@ -636,7 +611,7 @@ else:
         for i_rank, c in enumerate(ahp_rank, start=1):
             st.markdown(f"**{i_rank}.** {c}")
 
-    st.header("Consistencia global")
+    st.header("Resultado de la comparación")
 
     m1, m2, m3 = st.columns(3)
     with m1:
@@ -646,135 +621,105 @@ else:
     with m3:
         st.metric("CR global", f"{CR:.4f}")
 
-    if ok:
-        st.success("✅ Consistencia global aceptable.")
-    else:
-        st.warning("⚠️ La consistencia global aún es alta.")
-
-    st.header("Comparaciones más sensibles")
-    pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
-
-    for p in pairs:
-        st.markdown(f"""
-        <div style="
-        background-color:#111827;
-        border:1px solid #334155;
-        border-left:8px solid #ef4444;
-        padding:14px;
-        border-radius:12px;
-        margin:10px 0;">
-        <b>Pregunta {p['Pregunta']}</b><br>
-        {p['Comparación']}<br>
-        <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_pair_{p['Pregunta']}", use_container_width=True):
-            go_to_question(int(p["Pregunta"]))
+    st.success("✅ Con dos criterios, la comparación queda registrada directamente.")
 
 st.header("Finalizar")
 
-if not ok:
-    st.error("❌ No puede finalizar mientras el CR sea mayor a 0.10.")
-else:
-    if st.button("Enviar respuestas", key="send_responses_button"):
-        if st.session_state.current_step > 0 and "ui_score" in st.session_state and "ui_conf" in st.session_state:
-            save_current_question_from_ui()
-            rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
+if st.button("Enviar respuestas", key="send_responses_button"):
+    if st.session_state.current_step > 0 and "ui_score" in st.session_state and "ui_conf" in st.session_state:
+        save_current_question_from_ui()
+        rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 
-        if not email_enabled():
-            st.error("No se puede enviar el archivo porque faltan los datos SMTP en st.secrets.")
-        else:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            initial_rank = get_initial_ranking()
-            ahp_rank = current_ahp_ranking(w_crisp)
+    if not email_enabled():
+        st.error("No se puede enviar el archivo porque faltan los datos SMTP en st.secrets.")
+    else:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        initial_rank = get_initial_ranking()
+        ahp_rank = current_ahp_ranking(w_crisp)
 
-            df_pairwise = pd.DataFrame(rows)
-            df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
-            df_pairwise.insert(1, "Profession", profession.strip())
-            df_pairwise.insert(2, "Academic_Level", academic_level)
-            df_pairwise.insert(3, "Timestamp", ts)
+        df_pairwise = pd.DataFrame(rows)
+        df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
+        df_pairwise.insert(1, "Profession", profession.strip())
+        df_pairwise.insert(2, "Academic_Level", academic_level)
+        df_pairwise.insert(3, "Timestamp", ts)
 
-            df_initial_rank = pd.DataFrame({
-                "Posición_inicial": list(range(1, len(initial_rank) + 1)),
-                "Criterio": initial_rank
-            })
+        df_initial_rank = pd.DataFrame({
+            "Posición_inicial": list(range(1, len(initial_rank) + 1)),
+            "Criterio": initial_rank
+        })
 
-            df_current_rank = pd.DataFrame({
-                "Posición_AHP": list(range(1, len(ahp_rank) + 1)),
-                "Criterio": ahp_rank
-            })
+        df_current_rank = pd.DataFrame({
+            "Posición_AHP": list(range(1, len(ahp_rank) + 1)),
+            "Criterio": ahp_rank
+        })
 
-            df_participant = pd.DataFrame([{
-                "Respondent_Name": respondent_name.strip(),
-                "Profession": profession.strip(),
-                "Academic_Level": academic_level,
-                "Timestamp": ts,
-                "CR": float(CR),
-                "Lambda_max": float(lam),
-                "CI": float(CI)
-            }])
+        df_participant = pd.DataFrame([{
+            "Respondent_Name": respondent_name.strip(),
+            "Profession": profession.strip(),
+            "Academic_Level": academic_level,
+            "Timestamp": ts,
+            "CR": float(CR),
+            "Lambda_max": float(lam),
+            "CI": float(CI)
+        }])
 
-            df_cr = pd.DataFrame([{
-                "Respondent_Name": respondent_name.strip(),
-                "Timestamp": ts,
-                "CR": float(CR),
-                "Lambda_max": float(lam),
-                "CI": float(CI)
-            }])
+        df_cr = pd.DataFrame([{
+            "Respondent_Name": respondent_name.strip(),
+            "Timestamp": ts,
+            "CR": float(CR),
+            "Lambda_max": float(lam),
+            "CI": float(CI)
+        }])
 
-            df_pairs = pd.DataFrame(top_problematic_pairs(A_crisp, CRITERIA, top_k=15))
+        df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
+        df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
+        df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
+        df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
 
-            df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
-            df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
-            df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
-            df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
+        df_crisp_weights = pd.DataFrame({
+            "Criterio": CRITERIA,
+            "Peso_crisp": w_crisp
+        }).sort_values("Peso_crisp", ascending=False)
 
-            df_crisp_weights = pd.DataFrame({
-                "Criterio": CRITERIA,
-                "Peso_crisp": w_crisp
-            }).sort_values("Peso_crisp", ascending=False)
+        df_fuzzy_weights = pd.DataFrame({
+            "Criterio": CRITERIA,
+            "w_l": [float(w[0]) for w in w_fuzzy_tfn],
+            "w_m": [float(w[1]) for w in w_fuzzy_tfn],
+            "w_u": [float(w[2]) for w in w_fuzzy_tfn],
+            "Peso_fuzzy_defuzz": w_fuzzy_def
+        }).sort_values("Peso_fuzzy_defuzz", ascending=False)
 
-            df_fuzzy_weights = pd.DataFrame({
-                "Criterio": CRITERIA,
-                "w_l": [float(w[0]) for w in w_fuzzy_tfn],
-                "w_m": [float(w[1]) for w in w_fuzzy_tfn],
-                "w_u": [float(w[2]) for w in w_fuzzy_tfn],
-                "Peso_fuzzy_defuzz": w_fuzzy_def
-            }).sort_values("Peso_fuzzy_defuzz", ascending=False)
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+            df_participant.to_excel(writer, index=False, sheet_name="Participante")
+            df_initial_rank.to_excel(writer, index=False, sheet_name="Orden_Inicial")
+            df_current_rank.to_excel(writer, index=False, sheet_name="Orden_AHP")
+            df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
+            df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
+            df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
+            df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
+            df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
+            df_L.to_excel(writer, sheet_name="Fuzzy_L")
+            df_M.to_excel(writer, sheet_name="Fuzzy_M")
+            df_U.to_excel(writer, sheet_name="Fuzzy_U")
 
-            bio = BytesIO()
-            with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-                df_participant.to_excel(writer, index=False, sheet_name="Participante")
-                df_initial_rank.to_excel(writer, index=False, sheet_name="Orden_Inicial")
-                df_current_rank.to_excel(writer, index=False, sheet_name="Orden_AHP")
-                df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
-                df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
-                df_pairs.to_excel(writer, index=False, sheet_name="Pares_Sensibles")
-                df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
-                df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
-                df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
-                df_L.to_excel(writer, sheet_name="Fuzzy_L")
-                df_M.to_excel(writer, sheet_name="Fuzzy_M")
-                df_U.to_excel(writer, sheet_name="Fuzzy_U")
+        excel_bytes = bio.getvalue()
+        filename = f"AHP_Fuzzy_Muestreo_vs_Analitica_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-            excel_bytes = bio.getvalue()
-            filename = f"AHP_Fuzzy_Estrategia_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        admin = SECRETS["ADMIN_EMAIL"]
+        subject = f"Respuesta AHP/Fuzzy Muestreo vs Analítica: {respondent_name.strip()}"
+        body = (
+            f"Se recibió una nueva respuesta.\n\n"
+            f"Participante: {respondent_name.strip()}\n"
+            f"Profesión: {profession.strip()}\n"
+            f"Nivel académico: {academic_level}\n"
+            f"Timestamp: {ts}\n"
+            f"CR: {CR:.4f}\n\n"
+            f"Se adjunta el archivo Excel con la comparación entre Muestreo y Analítica."
+        )
 
-            admin = SECRETS["ADMIN_EMAIL"]
-            subject = f"Respuesta AHP/Fuzzy Estrategia H2: {respondent_name.strip()}"
-            body = (
-                f"Se recibió una nueva respuesta.\n\n"
-                f"Participante: {respondent_name.strip()}\n"
-                f"Profesión: {profession.strip()}\n"
-                f"Nivel académico: {academic_level}\n"
-                f"Timestamp: {ts}\n"
-                f"CR: {CR:.4f}\n\n"
-                f"Se adjunta el archivo Excel con ranking inicial, comparaciones AHP, consistencia y comparaciones sensibles."
-            )
-
-            try:
-                send_email(admin, subject, body, excel_bytes, filename)
-                st.success("✅ Respuestas enviadas correctamente al email configurado.")
-            except Exception as e:
-                st.error(f"No se pudo enviar el correo: {e}")
+        try:
+            send_email(admin, subject, body, excel_bytes, filename)
+            st.success("✅ Respuestas enviadas correctamente al email configurado.")
+        except Exception as e:
+            st.error(f"No se pudo enviar el correo: {e}")
