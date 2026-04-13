@@ -18,22 +18,8 @@ RI_TABLE = {
 
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 
-# Escala discreta simétrica sin 0
-SCORE_OPTIONS = [-9, -7, -5, -3, -1, 1, 3, 5, 7, 9]
-
-# Mapeo discreto tipo Saaty
-RATIO_SCALE = {
-    -9: 9.0,
-    -7: 7.0,
-    -5: 5.0,
-    -3: 3.0,
-    -1: 2.0,
-     1: 1.0,
-     3: 1/2,
-     5: 1/3,
-     7: 1/5,
-     9: 1/9,
-}
+# Escala solicitada por el usuario
+SCORE_OPTIONS = [-9, -8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 9]
 
 # La confianza ahora mueve "pasos" dentro de SCORE_OPTIONS
 CONFIDENCE_STEPS = {
@@ -70,7 +56,7 @@ def interpret_pair(score: int, a: str, b: str) -> str:
 
     if score == 1:
         return f"{a_fmt} y {b_fmt} tienen importancia similar."
-    elif score < 1:
+    elif score < 0:
         return f"{a_fmt} es más importante que {b_fmt}."
     return f"{b_fmt} es más importante que {a_fmt}."
 
@@ -79,7 +65,21 @@ def interpret_pair(score: int, a: str, b: str) -> str:
 # FUNCIONES MATEMÁTICAS
 # ============================================================
 def score_to_ratio(score: int) -> float:
-    return float(RATIO_SCALE[int(score)])
+    """
+    Conversión discreta directa sin fórmula logarítmica explícita.
+    - negativos -> favorecen al criterio izquierdo
+    - positivos -> favorecen al criterio derecho
+    - 1 -> igualdad
+    """
+    score = int(score)
+
+    if score == 1:
+        return 1.0
+
+    if score < 0:
+        return float(abs(score))
+    else:
+        return float(1 / score)
 
 
 def move_score_steps(score: int, steps: int) -> int:
@@ -344,7 +344,6 @@ def collect_all_rows_and_results():
 
         step_delta = CONFIDENCE_STEPS[conf]
 
-        # Hacia la izquierda = scores menores; hacia la derecha = scores mayores
         score_left = move_score_steps(score, -step_delta)
         score_mid = score
         score_right = move_score_steps(score, step_delta)
@@ -572,13 +571,13 @@ else:
     """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style='display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px; gap:8px;'>
+    <div style='display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;'>
         <span>Extremadamente importante</span>
-        <span>Muy importante</span>
-        <span>Moderadamente importante</span>
+        <span>Moderado</span>
+        <span>Ligero</span>
         <span>Igual importancia</span>
-        <span>Moderadamente importante</span>
-        <span>Muy importante</span>
+        <span>Ligero</span>
+        <span>Moderado</span>
         <span>Extremadamente importante</span>
     </div>
     """, unsafe_allow_html=True)
