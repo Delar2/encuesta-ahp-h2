@@ -565,9 +565,7 @@ else:
         ">
             <span>Extremadamente importante</span>
             <span>Moderado</span>
-            <span>Ligero</span>
             <span>Igual importancia</span>
-            <span>Ligero</span>
             <span>Moderado</span>
             <span>Extremadamente importante</span>
         </div>
