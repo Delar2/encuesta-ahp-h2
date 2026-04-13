@@ -37,8 +37,7 @@ CRITERIA = [
     "Caracterización isotópica de Helio",
     "Cromatografía de gases",
     "Caracterización Mineralógica",
-    "Análisis Biogeoquímico",
-    "Análisis fisicoquímicos"
+    "Análisis Biogeoquímico"
 ]
 
 DEFINICIONES = {
@@ -46,8 +45,7 @@ DEFINICIONES = {
     "Caracterización isotópica de Helio": "análisis isotópico del helio para aportar información sobre procedencia, migración y posibles fuentes geológicas profundas",
     "Cromatografía de gases": "técnica analítica para separar, identificar y cuantificar gases o compuestos volátiles presentes en la muestra",
     "Caracterización Mineralógica": "análisis de la composición y características mineralógicas del material para entender procesos geológicos y de interacción fluido-roca",
-    "Análisis Biogeoquímico": "evaluación de procesos biológicos, geoquímicos y sus interacciones para interpretar transformaciones del sistema natural",
-    "Análisis fisicoquímicos": "medición de parámetros físicos y químicos de la muestra, como pH, conductividad, temperatura, alcalinidad u otras propiedades relevantes"
+    "Análisis Biogeoquímico": "evaluación de procesos biológicos, geoquímicos y sus interacciones para interpretar transformaciones del sistema natural"
 }
 
 
