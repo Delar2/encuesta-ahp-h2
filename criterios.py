@@ -563,11 +563,11 @@ else:
             margin-top:8px;
             gap:8px;
         ">
-            <span>Extremadamente importante</span>
+            <span>Muy importante</span>
             <span>Moderado</span>
             <span>Igual importancia</span>
             <span>Moderado</span>
-            <span>Extremadamente importante</span>
+            <span>Muy importante</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
