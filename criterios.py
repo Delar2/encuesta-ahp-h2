@@ -21,7 +21,7 @@ ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 # Escala solicitada por el usuario
 SCORE_OPTIONS = [-9, -8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 9]
 
-# La confianza ahora mueve "pasos" dentro de SCORE_OPTIONS
+# La confianza mueve "pasos" dentro de SCORE_OPTIONS
 CONFIDENCE_STEPS = {
     "Muy seguro": 0,
     "Moderadamente seguro": 1,
@@ -30,20 +30,16 @@ CONFIDENCE_STEPS = {
 CONFIDENCE_OPTIONS = list(CONFIDENCE_STEPS.keys())
 
 # ============================================================
-# CRITERIOS ACTUALIZADOS
+# CRITERIOS
 # ============================================================
 CRITERIA = [
-    "Costo",
-    "Rango de detección de H₂",
-    "Detección multigas",
-    "Portabilidad y autonomía energética",
+    "Muestreo",
+    "Analítica"
 ]
 
 DEFINICIONES = {
-    "Costo": "el precio de adquisición del equipo, sus accesorios y los costos de implementación",
-    "Rango de detección de H₂": "el intervalo de concentración de hidrógeno que el equipo puede medir, desde valores bajos hasta altos",
-    "Detección multigas": "la capacidad del equipo para medir otros gases además del hidrógeno, como CH₄ y N₂",
-    "Portabilidad y autonomía energética": "la batería, fuente de alimentación, duración de carga, peso y dimensiones del equipo",
+    "Muestreo": "conjunto de estrategias y procedimientos para recolectar muestras o mediciones representativas en campo",
+    "Analítica": "conjunto de técnicas de laboratorio o caracterización empleadas para analizar e interpretar las muestras recolectadas"
 }
 
 
@@ -66,7 +62,7 @@ def interpret_pair(score: int, a: str, b: str) -> str:
 # ============================================================
 def score_to_ratio(score: int) -> float:
     """
-    Conversión discreta directa sin fórmula logarítmica explícita.
+    Conversión discreta directa:
     - negativos -> favorecen al criterio izquierdo
     - positivos -> favorecen al criterio derecho
     - 1 -> igualdad
@@ -205,7 +201,7 @@ def send_email(to_email: str, subject: str, body: str, attachment_bytes: bytes, 
         attachment_bytes,
         maintype="application",
         subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        filename=attachment_name,
+        filename=attachment_name
     )
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
@@ -320,12 +316,6 @@ def go_prev():
         st.session_state["ui_loaded_qid"] = None
 
 
-def go_to_question(question_number: int):
-    if st.session_state.current_step > 0:
-        save_current_question_from_ui()
-    request_question_load(question_number)
-
-
 # ============================================================
 # RESULTADOS
 # ============================================================
@@ -400,50 +390,29 @@ def current_ahp_ranking(w_crisp):
     return [c for c, _ in ranking]
 
 
-def pair_local_inconsistency(A: np.ndarray, pair_i: int, pair_j: int) -> float:
-    n = A.shape[0]
-    errs = []
+# ============================================================
+# ESTILOS
+# ============================================================
+st.set_page_config(page_title="Encuesta AHP Estrategia", layout="centered")
 
-    for k in range(n):
-        if k == pair_i or k == pair_j:
-            continue
-        implied_ij = A[pair_i, k] / A[pair_j, k]
-        err = abs(np.log(A[pair_i, pair_j]) - np.log(implied_ij))
-        errs.append(err)
+st.markdown("""
+<style>
+/* Oculta el label del select_slider */
+div[data-testid="stSelectSlider"] label {
+    display: none !important;
+}
 
-    if not errs:
-        return 0.0
-    return float(np.mean(errs))
-
-
-def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
-    pair_to_q = {}
-    for q_num, (a, b, _) in enumerate(COMPARISONS, start=1):
-        pair_to_q[(a, b)] = q_num
-        pair_to_q[(b, a)] = q_num
-
-    n = A.shape[0]
-    rows = []
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            a = labels[i]
-            b = labels[j]
-            rows.append({
-                "Pregunta": pair_to_q[(a, b)],
-                "Comparación": f"{a} vs {b}",
-                "Inconsistencia_local": pair_local_inconsistency(A, i, j),
-            })
-
-    rows.sort(key=lambda x: x["Inconsistencia_local"], reverse=True)
-    return rows[:min(top_k, len(rows))]
+/* Aumenta tamaño del valor seleccionado */
+div[data-testid="stSelectSlider"] * {
+    font-size: 1.08rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 # ============================================================
 # UI
 # ============================================================
-st.set_page_config(page_title="Encuesta AHP H₂", layout="centered")
-
 ensure_answer_state()
 
 if st.session_state.current_step > 0:
@@ -455,27 +424,23 @@ if st.session_state.current_step > 0:
         load_current_question_into_ui(force=True)
         st.session_state["pending_question_load"] = False
 
-st.title("Encuesta AHP — Selección de medidores para la detección de hidrógeno natural en campo")
+st.title("Encuesta AHP — Comparación entre Muestreo y Analítica")
 st.caption("Encuesta realizada por Juan Pardo y Salim Shalom")
 
 st.markdown("""
 ### Descripción de la encuesta
 
-El objetivo de esta encuesta es determinar, de manera estructurada y transparente, cuáles son los criterios técnicos más relevantes para definir la **selección de medidores para la detección de hidrógeno natural en campo**.
+El objetivo de esta encuesta es determinar, de manera estructurada y transparente, la importancia relativa entre los criterios **Muestreo** y **Analítica** para definir el valor técnico de la estrategia de caracterización de filtraciones superficiales de H₂ en “círculos de hadas”.
 
 ### Enfoque metodológico
 
-Para establecer la importancia relativa de los criterios se utilizará el método **AHP (Analytic Hierarchy Process)**. Este método permite comparar diferentes criterios de forma pareada con el fin de determinar sus pesos relativos dentro de la estructura de decisión.
-
-Los pesos obtenidos mediante AHP representarán las prioridades técnicas del estudio.
-
-Posteriormente, estos pesos serán ingresados en un modelo matemático de optimización cuyo objetivo será seleccionar la mejor combinación de equipos, considerando tanto el desempeño técnico como las restricciones económicas del proyecto.
+Se utilizará el método **AHP (Analytic Hierarchy Process)** para comparar ambos criterios de forma pareada y obtener su peso relativo dentro de la estructura de decisión.
 
 ### Consideraciones importantes
 
 - No existe una respuesta correcta o incorrecta.
-- Las comparaciones deben realizarse siempre pensando en:  
-  **¿Qué criterio es más importante para garantizar la calidad técnica en la caracterización de filtraciones de hidrógeno?**
+- La comparación debe realizarse pensando en:  
+  **¿Qué criterio es más importante para definir el valor técnico de la estrategia de caracterización?**
 """)
 
 st.header("Datos del participante")
@@ -499,7 +464,6 @@ if (
     save_current_question_from_ui()
 
 rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
-ok = CR <= CR_THRESHOLD
 
 st.header("Progreso")
 step_num = st.session_state.current_step + 1
@@ -526,7 +490,7 @@ if st.session_state.current_step == 0:
                 <b>{idx + 1}.</b> {item}
                 </div>
                 """,
-                unsafe_allow_html=True,
+                unsafe_allow_html=True
             )
         with c2:
             st.button("↑", key=f"rank_up_{idx}", on_click=move_rank_item_up, args=(idx,), disabled=(idx == 0), use_container_width=True)
@@ -538,7 +502,7 @@ if st.session_state.current_step == 0:
     with center_col:
         st.markdown(
             "<div style='text-align:center; padding-top:8px; font-weight:700;'>Orden inicial de criterios</div>",
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
     with right_col:
         st.button("Siguiente ➡️", key="next_from_ranking", on_click=go_next, use_container_width=True)
@@ -564,38 +528,66 @@ else:
 
     Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
     <br><br>
-    Seleccione la intensidad de preferencia.  
+    Seleccione la intensidad de preferencia.
+    <br>
     Marque <b>1</b> si cree que ambos son igualmente necesarios.
 
     </div>
     """, unsafe_allow_html=True)
 
+    # Barra visual de color + etiquetas
     st.markdown("""
-    <div style='display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;'>
-        <span>Extremadamente importante</span>
-        <span>Moderado</span>
-        <span>Ligero</span>
-        <span>Igual importancia</span>
-        <span>Ligero</span>
-        <span>Moderado</span>
-        <span>Extremadamente importante</span>
+    <div style="margin: 10px 0 6px 0;">
+        <div style="
+            height: 16px;
+            border-radius: 999px;
+            background: linear-gradient(
+                90deg,
+                #b91c1c 0%,
+                #ef4444 18%,
+                #f59e0b 35%,
+                #eab308 46%,
+                #22c55e 50%,
+                #eab308 54%,
+                #f59e0b 65%,
+                #ef4444 82%,
+                #b91c1c 100%
+            );
+            border: 1px solid #334155;
+        "></div>
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            font-size:15px;
+            font-weight:600;
+            margin-top:8px;
+            gap:8px;
+        ">
+            <span>Extremadamente importante</span>
+            <span>Moderado</span>
+            <span>Ligero</span>
+            <span>Igual importancia</span>
+            <span>Ligero</span>
+            <span>Moderado</span>
+            <span>Extremadamente importante</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.select_slider(
-        "Escala de preferencia",
+        label="",
         options=SCORE_OPTIONS,
         value=1,
-        key="ui_score",
+        key="ui_score"
     )
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
-        st.markdown(f"<div style='text-align:left; font-size:20px'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:left; font-size:22px; font-weight:700;'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown("<div style='text-align:center; font-size:20px'><b>1 = iguales</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; font-size:22px; font-weight:700;'><b>1 = iguales</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right; font-size:22px; font-weight:700;'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
     st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
@@ -610,63 +602,7 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### Navegador entre preguntas")
-
-    row1_col1, row1_col2, row1_col3 = st.columns([1, 2, 1])
-    with row1_col1:
-        st.button("⬅️ Anterior", key="nav_prev_main", on_click=go_prev, use_container_width=True)
-
-    with row1_col2:
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px; font-weight:700;'>"
-            f"Pregunta {st.session_state.current_step} / {TOTAL_QUESTIONS}"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    with row1_col3:
-        st.button(
-            "Siguiente ➡️",
-            key="nav_next_main",
-            on_click=go_next,
-            disabled=(st.session_state.current_step == TOTAL_QUESTIONS),
-            use_container_width=True,
-        )
-
-    quick_options = list(range(1, TOTAL_QUESTIONS + 1))
-    quick_current = st.session_state.current_step if st.session_state.current_step in quick_options else 1
-
-    row2_col1, row2_col2 = st.columns([1, 1])
-    with row2_col1:
-        st.selectbox(
-            "Pregunta rápida",
-            options=quick_options,
-            index=quick_options.index(quick_current),
-            key="quick_question_selector",
-            format_func=lambda x: f"Pregunta {x}",
-        )
-
-    with row2_col2:
-        if st.button("Abrir pregunta", key="open_quick_question_button", use_container_width=True):
-            go_to_question(int(st.session_state["quick_question_selector"]))
-
-    st.header("Organización de preferencias")
-
-    initial_rank = get_initial_ranking()
-    ahp_rank = current_ahp_ranking(w_crisp)
-
-    rc1, rc2 = st.columns(2)
-    with rc1:
-        st.subheader("Orden inicial del encuestado")
-        for i_rank, c in enumerate(initial_rank, start=1):
-            st.markdown(f"**{i_rank}.** {c}")
-
-    with rc2:
-        st.subheader("Orden actual según AHP")
-        for i_rank, c in enumerate(ahp_rank, start=1):
-            st.markdown(f"**{i_rank}.** {c}")
-
-    st.header("Consistencia global")
+    st.header("Resultado de la comparación")
 
     m1, m2, m3 = st.columns(3)
     with m1:
@@ -676,135 +612,105 @@ else:
     with m3:
         st.metric("CR global", f"{CR:.4f}")
 
-    if ok:
-        st.success("✅ Consistencia global aceptable.")
-    else:
-        st.warning("⚠️ La consistencia global aún es alta.")
-
-    st.header("Comparaciones más sensibles")
-    pairs = top_problematic_pairs(A_crisp, CRITERIA, top_k=6)
-
-    for p in pairs:
-        st.markdown(f"""
-        <div style="
-        background-color:#111827;
-        border:1px solid #334155;
-        border-left:8px solid #ef4444;
-        padding:14px;
-        border-radius:12px;
-        margin:10px 0;">
-        <b>Pregunta {p['Pregunta']}</b><br>
-        {p['Comparación']}<br>
-        <b>Inconsistencia local:</b> {p['Inconsistencia_local']:.4f}
-        </div>
-        """, unsafe_allow_html=True)
-
-        if st.button(f"Ir a P{p['Pregunta']}", key=f"go_sensitive_pair_{p['Pregunta']}", use_container_width=True):
-            go_to_question(int(p["Pregunta"]))
+    st.success("✅ Con dos criterios, la comparación queda registrada directamente.")
 
 st.header("Finalizar")
 
-if not ok:
-    st.error("❌ No puede finalizar mientras el CR sea mayor a 0.10.")
-else:
-    if st.button("Enviar respuestas", key="send_responses_button"):
-        if st.session_state.current_step > 0 and "ui_score" in st.session_state and "ui_conf" in st.session_state:
-            save_current_question_from_ui()
-            rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
+if st.button("Enviar respuestas", key="send_responses_button"):
+    if st.session_state.current_step > 0 and "ui_score" in st.session_state and "ui_conf" in st.session_state:
+        save_current_question_from_ui()
+        rows, A_crisp, lam, CI, CR, w_crisp, L, M, U, w_fuzzy_tfn, w_fuzzy_def = collect_all_rows_and_results()
 
-        if not email_enabled():
-            st.error("No se puede enviar el archivo porque faltan los datos SMTP en st.secrets.")
-        else:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            initial_rank = get_initial_ranking()
-            ahp_rank = current_ahp_ranking(w_crisp)
+    if not email_enabled():
+        st.error("No se puede enviar el archivo porque faltan los datos SMTP en st.secrets.")
+    else:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        initial_rank = get_initial_ranking()
+        ahp_rank = current_ahp_ranking(w_crisp)
 
-            df_pairwise = pd.DataFrame(rows)
-            df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
-            df_pairwise.insert(1, "Profession", profession.strip())
-            df_pairwise.insert(2, "Academic_Level", academic_level)
-            df_pairwise.insert(3, "Timestamp", ts)
+        df_pairwise = pd.DataFrame(rows)
+        df_pairwise.insert(0, "Respondent_Name", respondent_name.strip())
+        df_pairwise.insert(1, "Profession", profession.strip())
+        df_pairwise.insert(2, "Academic_Level", academic_level)
+        df_pairwise.insert(3, "Timestamp", ts)
 
-            df_initial_rank = pd.DataFrame({
-                "Posición_inicial": list(range(1, len(initial_rank) + 1)),
-                "Criterio": initial_rank,
-            })
+        df_initial_rank = pd.DataFrame({
+            "Posición_inicial": list(range(1, len(initial_rank) + 1)),
+            "Criterio": initial_rank
+        })
 
-            df_current_rank = pd.DataFrame({
-                "Posición_AHP": list(range(1, len(ahp_rank) + 1)),
-                "Criterio": ahp_rank,
-            })
+        df_current_rank = pd.DataFrame({
+            "Posición_AHP": list(range(1, len(ahp_rank) + 1)),
+            "Criterio": ahp_rank
+        })
 
-            df_participant = pd.DataFrame([{
-                "Respondent_Name": respondent_name.strip(),
-                "Profession": profession.strip(),
-                "Academic_Level": academic_level,
-                "Timestamp": ts,
-                "CR": float(CR),
-                "Lambda_max": float(lam),
-                "CI": float(CI),
-            }])
+        df_participant = pd.DataFrame([{
+            "Respondent_Name": respondent_name.strip(),
+            "Profession": profession.strip(),
+            "Academic_Level": academic_level,
+            "Timestamp": ts,
+            "CR": float(CR),
+            "Lambda_max": float(lam),
+            "CI": float(CI)
+        }])
 
-            df_cr = pd.DataFrame([{
-                "Respondent_Name": respondent_name.strip(),
-                "Timestamp": ts,
-                "CR": float(CR),
-                "Lambda_max": float(lam),
-                "CI": float(CI),
-            }])
+        df_cr = pd.DataFrame([{
+            "Respondent_Name": respondent_name.strip(),
+            "Timestamp": ts,
+            "CR": float(CR),
+            "Lambda_max": float(lam),
+            "CI": float(CI)
+        }])
 
-            df_pairs = pd.DataFrame(top_problematic_pairs(A_crisp, CRITERIA, top_k=15))
+        df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
+        df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
+        df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
+        df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
 
-            df_crisp_matrix = pd.DataFrame(A_crisp, index=CRITERIA, columns=CRITERIA)
-            df_L = pd.DataFrame(L, index=CRITERIA, columns=CRITERIA)
-            df_M = pd.DataFrame(M, index=CRITERIA, columns=CRITERIA)
-            df_U = pd.DataFrame(U, index=CRITERIA, columns=CRITERIA)
+        df_crisp_weights = pd.DataFrame({
+            "Criterio": CRITERIA,
+            "Peso_crisp": w_crisp
+        }).sort_values("Peso_crisp", ascending=False)
 
-            df_crisp_weights = pd.DataFrame({
-                "Criterio": CRITERIA,
-                "Peso_crisp": w_crisp,
-            }).sort_values("Peso_crisp", ascending=False)
+        df_fuzzy_weights = pd.DataFrame({
+            "Criterio": CRITERIA,
+            "w_l": [float(w[0]) for w in w_fuzzy_tfn],
+            "w_m": [float(w[1]) for w in w_fuzzy_tfn],
+            "w_u": [float(w[2]) for w in w_fuzzy_tfn],
+            "Peso_fuzzy_defuzz": w_fuzzy_def
+        }).sort_values("Peso_fuzzy_defuzz", ascending=False)
 
-            df_fuzzy_weights = pd.DataFrame({
-                "Criterio": CRITERIA,
-                "w_l": [float(w[0]) for w in w_fuzzy_tfn],
-                "w_m": [float(w[1]) for w in w_fuzzy_tfn],
-                "w_u": [float(w[2]) for w in w_fuzzy_tfn],
-                "Peso_fuzzy_defuzz": w_fuzzy_def,
-            }).sort_values("Peso_fuzzy_defuzz", ascending=False)
+        bio = BytesIO()
+        with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+            df_participant.to_excel(writer, index=False, sheet_name="Participante")
+            df_initial_rank.to_excel(writer, index=False, sheet_name="Orden_Inicial")
+            df_current_rank.to_excel(writer, index=False, sheet_name="Orden_AHP")
+            df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
+            df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
+            df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
+            df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
+            df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
+            df_L.to_excel(writer, sheet_name="Fuzzy_L")
+            df_M.to_excel(writer, sheet_name="Fuzzy_M")
+            df_U.to_excel(writer, sheet_name="Fuzzy_U")
 
-            bio = BytesIO()
-            with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-                df_participant.to_excel(writer, index=False, sheet_name="Participante")
-                df_initial_rank.to_excel(writer, index=False, sheet_name="Orden_Inicial")
-                df_current_rank.to_excel(writer, index=False, sheet_name="Orden_AHP")
-                df_pairwise.to_excel(writer, index=False, sheet_name="Pairwise")
-                df_cr.to_excel(writer, index=False, sheet_name="Consistencia")
-                df_pairs.to_excel(writer, index=False, sheet_name="Pares_Sensibles")
-                df_crisp_weights.to_excel(writer, index=False, sheet_name="Pesos_Crisp")
-                df_fuzzy_weights.to_excel(writer, index=False, sheet_name="Pesos_Fuzzy")
-                df_crisp_matrix.to_excel(writer, sheet_name="Matriz_Crisp")
-                df_L.to_excel(writer, sheet_name="Fuzzy_L")
-                df_M.to_excel(writer, sheet_name="Fuzzy_M")
-                df_U.to_excel(writer, sheet_name="Fuzzy_U")
+        excel_bytes = bio.getvalue()
+        filename = f"AHP_Fuzzy_Muestreo_vs_Analitica_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
-            excel_bytes = bio.getvalue()
-            filename = f"AHP_Fuzzy_Medidores_H2_{respondent_name.strip().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        admin = SECRETS["ADMIN_EMAIL"]
+        subject = f"Respuesta AHP/Fuzzy Muestreo vs Analítica: {respondent_name.strip()}"
+        body = (
+            f"Se recibió una nueva respuesta.\n\n"
+            f"Participante: {respondent_name.strip()}\n"
+            f"Profesión: {profession.strip()}\n"
+            f"Nivel académico: {academic_level}\n"
+            f"Timestamp: {ts}\n"
+            f"CR: {CR:.4f}\n\n"
+            f"Se adjunta el archivo Excel con la comparación entre Muestreo y Analítica."
+        )
 
-            admin = SECRETS["ADMIN_EMAIL"]
-            subject = f"Respuesta AHP/Fuzzy Medidores H2: {respondent_name.strip()}"
-            body = (
-                f"Se recibió una nueva respuesta.\n\n"
-                f"Participante: {respondent_name.strip()}\n"
-                f"Profesión: {profession.strip()}\n"
-                f"Nivel académico: {academic_level}\n"
-                f"Timestamp: {ts}\n"
-                f"CR: {CR:.4f}\n\n"
-                f"Se adjunta el archivo Excel con ranking inicial, comparaciones AHP, consistencia y comparaciones sensibles."
-            )
-
-            try:
-                send_email(admin, subject, body, excel_bytes, filename)
-                st.success("✅ Respuestas enviadas correctamente al email configurado.")
-            except Exception as e:
-                st.error(f"No se pudo enviar el correo: {e}")
+        try:
+            send_email(admin, subject, body, excel_bytes, filename)
+            st.success("✅ Respuestas enviadas correctamente al email configurado.")
+        except Exception as e:
+            st.error(f"No se pudo enviar el correo: {e}")
