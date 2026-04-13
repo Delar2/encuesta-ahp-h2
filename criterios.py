@@ -332,17 +332,15 @@ def collect_all_rows_and_results():
         i, j = idx_map[a], idx_map[b]
         crisp_answers[(i, j)] = r_crisp
 
-        step_delta = CONFIDENCE_STEPS[conf]
 
-        score_left = move_score_steps(score, -step_delta)
-        score_mid = score
-        score_right = move_score_steps(score, step_delta)
 
-        candidate_ratios = [
-            score_to_ratio(score_left),
-            score_to_ratio(score_mid),
-            score_to_ratio(score_right),
-        ]
+        step_delta = float(CONFIDENCE_STEPS[conf])
+
+        r_center = score_to_ratio(score)
+        r_left = interpolated_ratio(score, step_delta, direction=-1)
+        r_right = interpolated_ratio(score, step_delta, direction=+1)
+
+        candidate_ratios = [r_left, r_center, r_right]
         r_l, r_m, r_u = min(candidate_ratios), sorted(candidate_ratios)[1], max(candidate_ratios)
 
         rows.append({
@@ -352,15 +350,16 @@ def collect_all_rows_and_results():
             "Criterion_B": b,
             "score": score,
             "Confidence": conf,
-            "Confidence_steps": int(step_delta),
-            "TFN_score_left": int(score_left),
-            "TFN_score_mid": int(score_mid),
-            "TFN_score_right": int(score_right),
+            "Confidence_steps": float(step_delta),
+            "TFN_score_left": "",
+            "TFN_score_mid": int(score),
+            "TFN_score_right": "",
             "Ratio_crisp_for_CR": float(r_crisp),
             "TFN_ratio_l": float(r_l),
             "TFN_ratio_m": float(r_m),
             "TFN_ratio_u": float(r_u),
         })
+
 
     A_crisp = build_matrix(len(CRITERIA), crisp_answers)
     lam, CI, CR = ahp_cr(A_crisp)
