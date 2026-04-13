@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 from itertools import combinations
+from pathlib import Path
 
 
 # ============================================================
@@ -16,17 +17,22 @@ RI_TABLE = {
     6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45, 10: 1.49
 }
 
-# Ajustados para escala -9..9
-CONFIDENCE_DELTAS = {
-    "Muy seguro": 1.0,
-    "Moderadamente seguro": 2.0,
-    "Poco seguro": 4.0
-}
-CONFIDENCE_OPTIONS = list(CONFIDENCE_DELTAS.keys())
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 
+# Escala solicitada
+SCORE_OPTIONS = [-9, -8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 9]
+
+# Confianza en "pasos" sobre SCORE_OPTIONS
+CONFIDENCE_STEPS = {
+    "Muy seguro": 0.5,
+    "Moderadamente seguro": 1.0,
+    "Poco seguro": 2.0,
+}
+CONFIDENCE_OPTIONS = list(CONFIDENCE_STEPS.keys())
+
+
 # ============================================================
-# CRITERIOS ACTUALIZADOS
+# CRITERIOS / ALTERNATIVAS
 # ============================================================
 CRITERIA = [
     "Muestreo puntual",
@@ -37,7 +43,7 @@ CRITERIA = [
 
 DEFINICIONES = {
     "Muestreo puntual": "toma de datos en un solo momento y lugar específico, sin seguimiento temporal continuo",
-    "Medición a diferentes profundidades": "medición de concetración de gases a distintos niveles de profundidad",
+    "Medición a diferentes profundidades": "medición de concentración de gases a distintos niveles de profundidad",
     "Medición continua por 24 horas": "registro continuo durante un día completo para capturar variaciones diurnas o cambios de corto plazo",
     "Medición continua por 7 días": "registro continuo durante una semana completa para analizar patrones temporales más estables y variaciones prolongadas"
 }
@@ -50,7 +56,7 @@ def interpret_pair(score: int, a: str, b: str) -> str:
     a_fmt = f"<b><u>{a}</u></b>"
     b_fmt = f"<b><u>{b}</u></b>"
 
-    if score == 0:
+    if score == 1:
         return f"{a_fmt} y {b_fmt} tienen importancia similar."
     elif score < 0:
         return f"{a_fmt} es más importante que {b_fmt}."
@@ -60,23 +66,65 @@ def interpret_pair(score: int, a: str, b: str) -> str:
 # ============================================================
 # FUNCIONES MATEMÁTICAS
 # ============================================================
-def clamp(x: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, x))
-
-
-def score_to_ratio(score: float) -> float:
+def score_to_ratio(score: int) -> float:
     """
-    Convierte score en [-9, 9] a ratio A/B.
-    -9 => 9
-     0 => 1
-     9 => 1/9
+    Conversión discreta directa:
+    - negativos -> favorecen al criterio izquierdo
+    - positivos -> favorecen al criterio derecho
+    - 1 -> igualdad
     """
-    score = clamp(float(score), -9.0, 9.0)
-    return float(9 ** (-score / 9.0))
+    score = int(score)
+
+    if score == 1:
+        return 1.0
+
+    if score < 0:
+        return float(abs(score))
+    return float(1 / score)
 
 
-def ratio_from_score(score: float) -> float:
-    return score_to_ratio(score)
+def move_score_steps(score: int, steps: int) -> int:
+    idx = SCORE_OPTIONS.index(int(score))
+    new_idx = max(0, min(len(SCORE_OPTIONS) - 1, idx + steps))
+    return SCORE_OPTIONS[new_idx]
+
+
+def neighbor_score(score: int, direction: int) -> int:
+    """
+    direction = -1 -> vecino a la izquierda
+    direction = +1 -> vecino a la derecha
+    """
+    idx = SCORE_OPTIONS.index(int(score))
+    new_idx = max(0, min(len(SCORE_OPTIONS) - 1, idx + direction))
+    return SCORE_OPTIONS[new_idx]
+
+
+def interpolated_ratio(score: int, step_delta: float, direction: int) -> float:
+    """
+    Interpola en espacio de ratio entre el score actual y su vecino.
+    direction = -1 para lado izquierdo
+    direction = +1 para lado derecho
+    """
+    base_ratio = score_to_ratio(score)
+    if step_delta == 0:
+        return base_ratio
+
+    whole_steps = int(np.floor(step_delta))
+    frac = step_delta - whole_steps
+
+    moved_score = score
+    if whole_steps > 0:
+        moved_score = move_score_steps(score, direction * whole_steps)
+
+    moved_ratio = score_to_ratio(moved_score)
+
+    if frac == 0:
+        return moved_ratio
+
+    next_score = neighbor_score(moved_score, direction)
+    next_ratio = score_to_ratio(next_score)
+
+    return moved_ratio + frac * (next_ratio - moved_ratio)
 
 
 def build_matrix(n: int, answers: dict) -> np.ndarray:
@@ -226,7 +274,7 @@ def ensure_answer_state():
 
     for _, _, qid in COMPARISONS:
         if f"answer_score_{qid}" not in st.session_state:
-            st.session_state[f"answer_score_{qid}"] = 0
+            st.session_state[f"answer_score_{qid}"] = 1
         if f"answer_conf_{qid}" not in st.session_state:
             st.session_state[f"answer_conf_{qid}"] = CONFIDENCE_OPTIONS[0]
 
@@ -333,14 +381,14 @@ def collect_all_rows_and_results():
         i, j = idx_map[a], idx_map[b]
         crisp_answers[(i, j)] = r_crisp
 
-        d = CONFIDENCE_DELTAS[conf]
-        score_l = clamp(score - d, -9.0, 9.0)
-        score_m = float(score)
-        score_u = clamp(score + d, -9.0, 9.0)
+        step_delta = float(CONFIDENCE_STEPS[conf])
 
-        r_l = ratio_from_score(score_u)
-        r_m = ratio_from_score(score_m)
-        r_u = ratio_from_score(score_l)
+        r_center = score_to_ratio(score)
+        r_left = interpolated_ratio(score, step_delta, direction=-1)
+        r_right = interpolated_ratio(score, step_delta, direction=+1)
+
+        candidate_ratios = [r_left, r_center, r_right]
+        r_l, r_m, r_u = min(candidate_ratios), sorted(candidate_ratios)[1], max(candidate_ratios)
 
         rows.append({
             "Question_Number": q_num,
@@ -349,10 +397,10 @@ def collect_all_rows_and_results():
             "Criterion_B": b,
             "score": score,
             "Confidence": conf,
-            "Delta": float(d),
-            "TFN_score_l": float(score_l),
-            "TFN_score_m": float(score_m),
-            "TFN_score_u": float(score_u),
+            "Confidence_steps": float(step_delta),
+            "TFN_score_left": "",
+            "TFN_score_mid": int(score),
+            "TFN_score_right": "",
             "Ratio_crisp_for_CR": float(r_crisp),
             "TFN_ratio_l": float(r_l),
             "TFN_ratio_m": float(r_m),
@@ -427,10 +475,30 @@ def top_problematic_pairs(A: np.ndarray, labels: list, top_k: int = 5):
 
 
 # ============================================================
-# UI
+# ESTILOS
 # ============================================================
 st.set_page_config(page_title="Encuesta AHP Muestreo", layout="centered")
 
+st.markdown("""
+<style>
+div[data-testid="stSelectSlider"] label {
+    display: none !important;
+}
+
+div[data-testid="stSelectSlider"] * {
+    font-size: 1.15rem !important;
+}
+
+div[data-testid="stSelectbox"] * {
+    font-size: 1.02rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ============================================================
+# UI
+# ============================================================
 ensure_answer_state()
 
 if st.session_state.current_step > 0:
@@ -495,11 +563,15 @@ st.caption(f"Paso {step_num} de {TOTAL_STEPS}")
 
 if st.session_state.current_step == 0:
     st.header("Paso 1 — Orden inicial de alternativas")
-    st.image(
-        "imagen_2026-04-10_142741490.png",
-        caption="Criterios técnicos para la selección de medidores de hidrógeno",
-        use_container_width=True
-    )
+
+    image_path = Path("imagen_2026-04-10_142741490.png")
+    if image_path.exists():
+        st.image(
+            str(image_path),
+            caption="Alternativas evaluadas para el muestreo",
+            use_container_width=True
+        )
+
     st.markdown("Use los botones para mover las alternativas. **Arriba = más importante**, **abajo = menos importante**.")
 
     ranking = get_initial_ranking()
@@ -556,22 +628,49 @@ else:
 
     Recuerde que <b>{a}</b> corresponde a <b>{def_a}</b>, mientras que <b>{b}</b> corresponde a <b>{def_b}</b>.
     <br><br>
-    Utilice la escala lineal para desplazar el marcador hacia la alternativa que considere predominante.
+    Seleccione la intensidad de preferencia.
     <br>
-    Marque <b>0</b> si cree que ambas son igualmente necesarias.
+    Marque <b>1</b> si cree que ambas son igualmente necesarias.
 
     </div>
     """, unsafe_allow_html=True)
 
-    st.slider("Escala de preferencia", -9, 9, 0, 1, key="ui_score")
+    st.markdown("""
+    <div style="margin: 10px 0 6px 0;">
+        <div style="
+            height: 18px;
+            border-radius: 999px;
+            background: linear-gradient(
+                90deg,
+                #991b1b 0%,
+                #dc2626 14%,
+                #f97316 28%,
+                #facc15 42%,
+                #22c55e 50%,
+                #facc15 58%,
+                #f97316 72%,
+                #dc2626 86%,
+                #991b1b 100%
+            );
+            border: 1px solid #334155;
+        "></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.select_slider(
+        label="",
+        options=SCORE_OPTIONS,
+        value=1,
+        key="ui_score"
+    )
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
-        st.markdown(f"<div style='text-align:left; font-size:20px'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:left; font-size:24px; font-weight:700;'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown("<div style='text-align:center; font-size:20px'><b>0 = iguales</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; font-size:24px; font-weight:700;'><b>1 = iguales</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div style='text-align:right; font-size:20px'><b>{b} ← +9</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right; font-size:24px; font-weight:700;'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
     st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
