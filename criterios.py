@@ -571,25 +571,40 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
+    # Barra visual de color + etiquetas
     st.markdown("""
     <div style="margin: 10px 0 6px 0;">
         <div style="
-            height: 18px;
+            height: 16px;
             border-radius: 999px;
             background: linear-gradient(
                 90deg,
-                #991b1b 0%,
-                #dc2626 14%,
-                #f97316 28%,
-                #facc15 42%,
+                #b91c1c 0%,
+                #ef4444 18%,
+                #f59e0b 35%,
+                #eab308 46%,
                 #22c55e 50%,
-                #facc15 58%,
-                #f97316 72%,
-                #dc2626 86%,
-                #991b1b 100%
+                #eab308 54%,
+                #f59e0b 65%,
+                #ef4444 82%,
+                #b91c1c 100%
             );
             border: 1px solid #334155;
         "></div>
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            font-size:15px;
+            font-weight:600;
+            margin-top:8px;
+            gap:8px;
+        ">
+            <span>Muy importante</span>
+            <span>Moderado</span>
+            <span>Igual importancia</span>
+            <span>Moderado</span>
+            <span>Muy importante</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
