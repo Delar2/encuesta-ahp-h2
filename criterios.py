@@ -18,14 +18,14 @@ RI_TABLE = {
 
 ACADEMIC_LEVELS = ["Pregrado", "Especialización", "Maestría", "Doctorado"]
 
-# Escala solicitada por el usuario
+# Escala solicitada
 SCORE_OPTIONS = [-9, -8, -7, -6, -5, -4, -3, -2, 1, 2, 3, 4, 5, 6, 7, 9]
 
-# La confianza mueve "pasos" dentro de SCORE_OPTIONS
+# La confianza ahora mueve "pasos" dentro de SCORE_OPTIONS
 CONFIDENCE_STEPS = {
-    "Muy seguro": 0,
-    "Moderadamente seguro": 1,
-    "Poco seguro": 2,
+    "Muy seguro": 0.5,
+    "Moderadamente seguro": 1.0,
+    "Poco seguro": 2.0,
 }
 CONFIDENCE_OPTIONS = list(CONFIDENCE_STEPS.keys())
 
@@ -82,6 +82,44 @@ def move_score_steps(score: int, steps: int) -> int:
     idx = SCORE_OPTIONS.index(int(score))
     new_idx = max(0, min(len(SCORE_OPTIONS) - 1, idx + steps))
     return SCORE_OPTIONS[new_idx]
+
+
+def neighbor_score(score: int, direction: int) -> int:
+    """
+    direction = -1 -> vecino a la izquierda
+    direction = +1 -> vecino a la derecha
+    """
+    idx = SCORE_OPTIONS.index(int(score))
+    new_idx = max(0, min(len(SCORE_OPTIONS) - 1, idx + direction))
+    return SCORE_OPTIONS[new_idx]
+
+
+def interpolated_ratio(score: int, step_delta: float, direction: int) -> float:
+    """
+    Interpola en espacio de ratio entre el score actual y su vecino.
+    direction = -1 para lado izquierdo
+    direction = +1 para lado derecho
+    """
+    base_ratio = score_to_ratio(score)
+    if step_delta == 0:
+        return base_ratio
+
+    whole_steps = int(np.floor(step_delta))
+    frac = step_delta - whole_steps
+
+    moved_score = score
+    if whole_steps > 0:
+        moved_score = move_score_steps(score, direction * whole_steps)
+
+    moved_ratio = score_to_ratio(moved_score)
+
+    if frac == 0:
+        return moved_ratio
+
+    next_score = neighbor_score(moved_score, direction)
+    next_ratio = score_to_ratio(next_score)
+
+    return moved_ratio + frac * (next_ratio - moved_ratio)
 
 
 def build_matrix(n: int, answers: dict) -> np.ndarray:
@@ -332,8 +370,6 @@ def collect_all_rows_and_results():
         i, j = idx_map[a], idx_map[b]
         crisp_answers[(i, j)] = r_crisp
 
-
-
         step_delta = float(CONFIDENCE_STEPS[conf])
 
         r_center = score_to_ratio(score)
@@ -359,7 +395,6 @@ def collect_all_rows_and_results():
             "TFN_ratio_m": float(r_m),
             "TFN_ratio_u": float(r_u),
         })
-
 
     A_crisp = build_matrix(len(CRITERIA), crisp_answers)
     lam, CI, CR = ahp_cr(A_crisp)
@@ -396,14 +431,16 @@ st.set_page_config(page_title="Encuesta AHP Estrategia", layout="centered")
 
 st.markdown("""
 <style>
-/* Oculta el label del select_slider */
 div[data-testid="stSelectSlider"] label {
     display: none !important;
 }
 
-/* Aumenta tamaño del valor seleccionado */
 div[data-testid="stSelectSlider"] * {
-    font-size: 1.08rem !important;
+    font-size: 1.15rem !important;
+}
+
+div[data-testid="stSelectbox"] * {
+    font-size: 1.02rem !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -534,40 +571,25 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Barra visual de color + etiquetas
     st.markdown("""
     <div style="margin: 10px 0 6px 0;">
         <div style="
-            height: 16px;
+            height: 18px;
             border-radius: 999px;
             background: linear-gradient(
                 90deg,
-                #b91c1c 0%,
-                #ef4444 18%,
-                #f59e0b 35%,
-                #eab308 46%,
+                #991b1b 0%,
+                #dc2626 14%,
+                #f97316 28%,
+                #facc15 42%,
                 #22c55e 50%,
-                #eab308 54%,
-                #f59e0b 65%,
-                #ef4444 82%,
-                #b91c1c 100%
+                #facc15 58%,
+                #f97316 72%,
+                #dc2626 86%,
+                #991b1b 100%
             );
             border: 1px solid #334155;
         "></div>
-        <div style="
-            display:flex;
-            justify-content:space-between;
-            font-size:15px;
-            font-weight:600;
-            margin-top:8px;
-            gap:8px;
-        ">
-            <span>Muy importante</span>
-            <span>Moderado</span>
-            <span>Igual importancia</span>
-            <span>Moderado</span>
-            <span>Muy importante</span>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -580,11 +602,11 @@ else:
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
-        st.markdown(f"<div style='text-align:left; font-size:22px; font-weight:700;'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:left; font-size:24px; font-weight:700;'><b>-9 → {a}</b></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown("<div style='text-align:center; font-size:22px; font-weight:700;'><b>1 = iguales</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; font-size:24px; font-weight:700;'><b>1 = iguales</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div style='text-align:right; font-size:22px; font-weight:700;'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:right; font-size:24px; font-weight:700;'><b>{b} ← 9</b></div>", unsafe_allow_html=True)
 
     st.selectbox("¿Qué tan seguro está de esta evaluación?", CONFIDENCE_OPTIONS, key="ui_conf")
 
